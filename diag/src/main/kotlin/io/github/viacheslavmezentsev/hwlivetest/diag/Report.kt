@@ -13,17 +13,29 @@ data class Finding(val level: Level, val title: String, val detail: String = "")
 
 /** Раздел отчёта, как пункт списка в AIDA64: заголовок, итог и подробности. */
 data class Section(val title: String, val findings: List<Finding>) {
-    val level: Level
-        get() = findings.map { it.level }.filter { it != Level.SKIP }.maxOrNull()
-            ?: if (findings.isEmpty()) Level.SKIP else Level.INFO
+    /**
+     * Итог раздела: худшее из WARN/BAD, иначе OK, если есть хоть одно OK, иначе INFO.
+     * Справочные INFO не должны «перебивать» положительный результат.
+     */
+    val level: Level get() = summarize(findings.map { it.level })
 
-    /** Самое важное наблюдение раздела для строки списка. */
+    /** Главное наблюдение для строки списка: первое с уровнем итога. */
     val headline: String
-        get() = findings.filter { it.level == level }.firstOrNull()?.title ?: findings.firstOrNull()?.title ?: ""
+        get() = findings.firstOrNull { it.level == level }?.title ?: findings.firstOrNull()?.title ?: ""
+
+    companion object {
+        fun summarize(levels: List<Level>): Level = when {
+            Level.BAD in levels -> Level.BAD
+            Level.WARN in levels -> Level.WARN
+            Level.OK in levels -> Level.OK
+            Level.INFO in levels -> Level.INFO
+            else -> Level.SKIP
+        }
+    }
 }
 
 data class DiagReport(val sections: List<Section>, val summary: String) {
-    val level: Level get() = sections.map { it.level }.filter { it != Level.SKIP }.maxOrNull() ?: Level.INFO
+    val level: Level get() = Section.summarize(sections.map { it.level })
 
     /** Текст для журнала и «Копировать». */
     fun text(): String = buildString {

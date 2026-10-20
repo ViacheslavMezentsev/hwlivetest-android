@@ -69,7 +69,9 @@ class DiagnosticsTest {
             Diagnostics.SYST_CSR to 7, Diagnostics.SYST_RVR to 99999, Diagnostics.SYST_CVR to intArrayOf(50000, 40000),
         )
         val r = Diagnostics(m, target(0x431, 0x410FC241, 512), AdapterFacts("ST-Link/V2-1", "V2J45M31", 3.23), sleep = {}).run()
-        assertEquals(r.text(), Level.INFO, r.level)
+        assertEquals(r.text(), Level.OK, r.level)
+        assertEquals("Ядро выполняет инструкции", r.section("Ядро").headline)
+        assertEquals(Level.OK, r.section("Ядро").level)
         assertTrue(r.summary, r.summary.contains("ядро работает"))
         assertTrue(r.summary, r.summary.contains("прошивка есть"))
         assertTrue(r.summary, r.summary.contains("PLL от HSE 100 МГц"))
