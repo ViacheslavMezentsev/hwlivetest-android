@@ -2,6 +2,7 @@ package io.github.viacheslavmezentsev.hwlivetest
 
 import android.content.Context
 import android.graphics.Typeface
+import android.util.TypedValue
 import android.widget.LinearLayout
 import android.widget.TextView
 import io.github.viacheslavmezentsev.hwlivetest.stlink.hex32
@@ -37,8 +38,11 @@ class FieldRow(context: Context, private val field: Field, check: MemoryMap.Chec
         val pad = (8 * context.resources.displayMetrics.density).toInt()
         setPadding(0, pad, 0, pad)
         isClickable = true
-        isFocusable = true
-        setBackgroundResource(android.R.drawable.list_selector_background)
+        // Подсветка нажатия без «фокуса»: list_selector_background на Huawei оставлял строки жёлтыми.
+        val tv = TypedValue()
+        if (context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) {
+            setBackgroundResource(tv.resourceId)
+        }
         addView(title)
         addView(details)
     }

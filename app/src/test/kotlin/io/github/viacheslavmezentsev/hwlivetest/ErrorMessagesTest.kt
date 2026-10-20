@@ -34,4 +34,17 @@ class ErrorMessagesTest {
         log.add("c")
         assertEquals("b\nc", log.text())
     }
+
+    @Test
+    fun sessionLogTailAndProtocolLines() {
+        val log = SessionLog()
+        (1..5).forEach { log.add("# $it") }
+        assertTrue(log.tail(2).startsWith("… ещё 3 строк"))
+        assertTrue(log.tail(2).endsWith("# 4\n# 5"))
+        assertEquals("# 1\n# 2\n# 3\n# 4\n# 5", log.tail(10))
+        assertTrue(SessionLog.isProtocol("> f2 36"))
+        assertTrue(SessionLog.isProtocol("< 80 00"))
+        assertTrue(SessionLog.isProtocol("# < 1024 байт: 00 …"))
+        assertTrue(!SessionLog.isProtocol("# опрос остановлен"))
+    }
 }

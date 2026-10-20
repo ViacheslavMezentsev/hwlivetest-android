@@ -21,4 +21,20 @@
     <string name="window_5m">5 мин</string>
     <string name="btn_pause">Пауза</string>
     <string name="btn_resume">Дальше</string>
+    <string name="menu_simple">Простой режим</string>
+    <string name="menu_expert">Режим эксперта</string>
+    <string name="menu_copy_report">Копировать отчёт</string>
+    <string name="chk_log_polling">Записывать обмен во время опроса (медленно)</string>
+    <string name="btn_fields">Поля…</string>
+    <string name="scale_shared">Шкала: общая</string>
+    <string name="scale_own">Шкала: своя</string>
+    <string name="start">ПУСК</string>
+    <string name="stop">СТОП</string>
+    <string name="again">ЕЩЁ РАЗ</string>
+    <string name="section_tools">Инструменты (только чтение)</string>
+    <string name="tool_backup">Резервная копия Flash</string>
+    <string name="tool_check">Сверить с HEX</string>
+    <string name="tool_fields">Поля и графики</string>
+    <string name="tool_write_note">Прошивка, стирание, остановка и сброс меняют MCU — появятся после отдельного согласования режима записи.</string>
+    <string name="simple_hint">Подключите ST-Link к телефону и плату к ST-Link, затем нажмите ПУСК: приложение проверит, жив ли MCU, тактируется ли он, работает ли прошивка.</string>
 </resources>

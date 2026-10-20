@@ -138,6 +138,12 @@
                 android:text="@string/btn_clear_log" />
         </LinearLayout>
 
+        <CheckBox
+            android:id="@+id/chkLogPolling"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/chk_log_polling" />
+
         <TextView
             android:id="@+id/log"
             android:layout_width="match_parent"

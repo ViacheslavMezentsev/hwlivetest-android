@@ -6,4 +6,5 @@
     <color name="ok">#1A7F37</color>
     <color name="error">#CF222E</color>
     <color name="muted">#57606A</color>
+    <color name="warn">#BF8700</color>
 </resources>
