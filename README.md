@@ -24,7 +24,7 @@ Android USB Host API.
 
 Нужны JDK 17+ и Android SDK (проще всего — Android Studio).
 
-```
+```shell
 ./gradlew test assembleDebug
 ```
 
@@ -33,7 +33,7 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`. Готовый отладоч�
 
 ## Установка
 
-```
+```shell
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 

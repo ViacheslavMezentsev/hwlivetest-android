@@ -1,0 +1,11 @@
+{
+  // Правила markdownlint: https://github.com/DavidAnson/markdownlint
+  "config": {
+    "default": true,
+    // Длинные строки допустимы в таблицах и блоках кода; текст держим в пределах 100.
+    "MD013": { "line_length": 100, "tables": false, "code_blocks": false },
+    // Одинаковые заголовки в разных разделах (например, «Сборка») — нормально.
+    "MD024": { "siblings_only": true }
+  },
+  "ignores": ["**/build/**", ".gradle/**"]
+}

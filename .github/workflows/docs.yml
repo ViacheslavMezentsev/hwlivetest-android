@@ -1,0 +1,43 @@
+name: Docs
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "**.md"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "**.md"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  markdown:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Markdown lint
+        run: npx --yes markdownlint-cli2@0.18.1 "**/*.md"
+
+      - name: Local links and anchors
+        uses: lycheeverse/lychee-action@v2
+        with:
+          lycheeVersion: v0.18.1
+          args: --offline --no-progress --include-fragments "**/*.md"
+          fail: true

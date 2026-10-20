@@ -3,7 +3,17 @@ name: Android CI
 on:
   push:
     branches: [main, "claude/**"]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/workflows/docs.yml"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
