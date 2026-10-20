@@ -1,0 +1,40 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.kotlin/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.cxx/
+.externalNativeBuild/
+captures/
+.navigation/
+
+# Локальные настройки (путь к SDK и т. п.)
+local.properties
+
+# Сборочные артефакты
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output-metadata.json
+
+# Ключи подписи и секреты
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+google-services.json
+
+# Логи и дампы
+*.log
+*.hprof
+
+# ОС
+.DS_Store
+Thumbs.db
+desktop.ini
