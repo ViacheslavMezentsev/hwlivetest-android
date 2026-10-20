@@ -44,5 +44,6 @@ dependencies {
     implementation(project(":stlink"))
     implementation(project(":fx2la"))
     implementation(project(":recorder"))
+    implementation(project(":telemetry"))
     testImplementation(libs.junit)
 }
