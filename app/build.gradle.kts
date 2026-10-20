@@ -45,5 +45,6 @@ dependencies {
     implementation(project(":fx2la"))
     implementation(project(":recorder"))
     implementation(project(":telemetry"))
+    implementation(project(":diag"))
     testImplementation(libs.junit)
 }
