@@ -26,6 +26,8 @@ data class Field(
     /** Для полей регистров SVD: значение = (слово & mask) >> shift. */
     val shift: Int? = null,
     val mask: Long? = null,
+    /** Тип сообщения ROS из ключа `message` (std_msgs/Float32 и т. п.). */
+    val message: String? = null,
 ) {
     /** Короткое имя для списка: последний сегмент topic. */
     val shortName: String get() = topic.trimEnd('/').substringAfterLast('/').ifEmpty { topic }
@@ -119,6 +121,7 @@ data class AddressesFile(val fields: List<Field>, val warnings: List<String>) {
                     max = (m["max"] as? Number)?.toDouble(),
                     shift = (m["shift"] as? Number)?.toInt(),
                     mask = (m["mask"] as? Number)?.toLong(),
+                    message = m["message"] as? String,
                 )
             }
             return AddressesFile(fields, warnings)

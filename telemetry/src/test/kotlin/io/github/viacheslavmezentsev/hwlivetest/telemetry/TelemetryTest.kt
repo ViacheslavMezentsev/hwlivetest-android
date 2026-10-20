@@ -40,6 +40,7 @@ class TelemetryTest {
         assertEquals("batt_v", batt.shortName)
         assertEquals(FieldKind.FLOAT32, batt.kind)
         assertEquals(0x20000C5CL, batt.address)
+        assertEquals("std_msgs/Float32", batt.message)
         assertEquals(0x20014930L, f.fields[2].address) // только address_hex
         assertEquals(100000.0, f.fields[2].max!!, 0.0)
         assertEquals(5, f.fields[3].shift)
