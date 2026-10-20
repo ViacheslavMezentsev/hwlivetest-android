@@ -200,7 +200,7 @@ class MainActivity : Activity() {
                 info.notes.forEach { logLine("# $it") }
                 ui {
                     targetInfo.text = formatTarget(info)
-                    showStatus("Готово: ${info.cpuId?.coreName ?: "ядро не опознано"}, ${info.vendor.title}.", ok = true)
+                    showStatus("Готово: ${info.shortName}, ${info.cpuId?.coreName ?: "ядро не опознано"}.", ok = true)
                 }
             } catch (e: Exception) {
                 logLine("# ошибка: ${e.javaClass.simpleName}: ${e.message}")
@@ -251,12 +251,13 @@ class MainActivity : Activity() {
     }
 
     private fun formatAdapter(d: StLinkDevice, c: StLinkConnection): String = buildString {
-        appendLine("Модель:      ${d.title}")
-        appendLine("Прошивка:    ${c.version.label}")
-        appendLine("Режим:       ${c.initialMode.title} → SWD")
-        appendLine("Напряжение:  " + (c.targetVoltage?.let { "%.2f В".format(it) } ?: "не измеряется"))
-        appendLine("DP IDCODE:   ${c.dpIdCode.hex32()}")
-        append("             ${DpIdCode(c.dpIdCode).description}")
+        appendLine("Модель      ${d.model.title}")
+        appendLine("VID:PID     ${d.vidPid}")
+        appendLine("Прошивка    ${c.version.label}")
+        appendLine("Режим       ${c.initialMode.title} → SWD")
+        appendLine("Напряжение  " + (c.targetVoltage?.let { "%.2f В".format(it) } ?: "не измеряется"))
+        appendLine("DP IDCODE   ${c.dpIdCode.hex32()}")
+        append("DP          ${DpIdCode(c.dpIdCode).description}")
         c.warnings.forEach { append("\n⚠ ").append(it) }
     }
 
