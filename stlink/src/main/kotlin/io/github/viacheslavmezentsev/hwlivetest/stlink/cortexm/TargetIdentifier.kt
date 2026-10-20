@@ -1,0 +1,150 @@
+package io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm
+
+import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkErrorKind
+import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkException
+import io.github.viacheslavmezentsev.hwlivetest.stlink.hex12
+import io.github.viacheslavmezentsev.hwlivetest.stlink.hex16
+import io.github.viacheslavmezentsev.hwlivetest.stlink.hex32
+
+enum class McuVendor(val title: String) {
+    STM32("STMicroelectronics STM32"),
+    STM32_COMPATIBLE("STM32-совместимый (возможно, клон)"),
+    AT32("Artery AT32"),
+    UNKNOWN("не опознан"),
+}
+
+data class TargetInfo(
+    val cpuId: CpuId?,
+    val romBase: Long?,
+    val romBaseSource: String,
+    val rom: ComponentId?,
+    val idRegisterAddress: Long?,
+    val idRegister: Int?,
+    val vendor: McuVendor,
+    val stm32Part: Stm32.Part?,
+    val flashSizeAddress: Long?,
+    val flashSizeKb: Int?,
+    val notes: List<String>,
+) {
+    /** Строки для экрана и журнала: «параметр — значение». */
+    fun summary(): List<Pair<String, String>> = buildList {
+        cpuId?.let {
+            add("Ядро" to "${it.coreName} ${it.revisionLabel} (${it.implementerName})")
+            add("CPUID" to it.raw.hex32())
+        } ?: add("Ядро" to "CPUID не прочитан")
+        rom?.let {
+            add("ROM-таблица" to "${romBase?.hex32()} ($romBaseSource)")
+            add("Разработчик" to it.designer.label)
+            add("ROM part" to "${it.partNo.hex12()} rev ${it.revision}")
+        }
+        add("Производитель" to vendor.title)
+        if (idRegisterAddress != null && idRegister != null) {
+            val label = if (vendor == McuVendor.AT32) "DEBUG_IDCODE (PID)" else "DBGMCU_IDCODE"
+            add(label to "${idRegister.hex32()} @ ${idRegisterAddress.hex32()}")
+        }
+        if (vendor == McuVendor.STM32 || vendor == McuVendor.STM32_COMPATIBLE) {
+            val id = Stm32.IdCode(idRegister ?: 0)
+            add("DEV_ID" to "${id.devId.hex12()} ${stm32Part?.name ?: "(нет в справочнике)"}")
+            add("REV_ID" to id.revId.hex16())
+        }
+        flashSizeKb?.let { add("Flash" to "$it КБ") }
+    }
+}
+
+/**
+ * Опознание микроконтроллера Cortex-M только чтением: CPUID, ROM-таблица, DBGMCU/PID, F_SIZE.
+ * Ошибки отдельных шагов не прерывают опознание, а попадают в [TargetInfo.notes].
+ */
+class TargetIdentifier(private val mem: DebugMemory) {
+
+    fun identify(): TargetInfo {
+        val notes = mutableListOf<String>()
+
+        val cpuId = attempt(notes, "CPUID") { CpuId(mem.read32(CpuId.ADDRESS)) }
+        val core = cpuId?.core
+
+        var romBaseSource = "по умолчанию"
+        var romBase: Long? = RomTable.DEFAULT_BASE
+        val apBase = attempt(notes, "MEM-AP BASE") { mem.readApRegister(0, RomTable.AP_BASE_REGISTER) }
+        if (apBase != null) {
+            romBase = RomTable.baseFromApRegister(apBase)
+            romBaseSource = "MEM-AP BASE ${apBase.hex32()}"
+        }
+        val rom = romBase?.let { base ->
+            attempt(notes, "ROM-таблица") { ComponentId.read(mem, base) }
+        }?.also {
+            if (!it.isValid) notes += "CIDR ROM-таблицы не похож на CoreSight: ${it.cidr.joinToString { c -> "%02X".format(c) }}"
+        }
+        val romValid = rom?.isValid == true
+
+        // DBGMCU_IDCODE / DEBUG_IDCODE
+        var idAddress: Long? = null
+        var idValue: Int? = null
+        for (addr in Stm32.dbgmcuCandidates(core)) {
+            val v = attempt(notes, "ID ${addr.hex32()}") { mem.read32(addr) } ?: continue
+            if (v != 0 && v != -1) {
+                idAddress = addr
+                idValue = v
+                break
+            }
+        }
+
+        var vendor = McuVendor.UNKNOWN
+        var part: Stm32.Part? = null
+        var flashAddr: Long? = null
+        if (idValue != null) {
+            val stm = Stm32.IdCode(idValue)
+            when {
+                stm.looksLikeStm32 -> {
+                    part = stm.part
+                    flashAddr = part?.flashSizeAddress
+                    vendor = if (!romValid || rom?.designer == Jep106.ST) McuVendor.STM32 else McuVendor.STM32_COMPATIBLE
+                    if (romValid && rom?.designer == Jep106.ST && rom.partNo != stm.devId) {
+                        notes += "DEV_ID ${stm.devId.hex12()} не совпадает с part ROM-таблицы ${rom.partNo.hex12()}"
+                    }
+                    if (vendor == McuVendor.STM32_COMPATIBLE) {
+                        notes += "ROM-таблица от «${rom?.designer?.label}», а не ST: возможно, GD32/APM32/CKS32 или другой совместимый."
+                    }
+                }
+                At32.looksLikeAt32(idValue, core) -> {
+                    vendor = McuVendor.AT32
+                    flashAddr = At32.FLASH_SIZE
+                    notes += "AT32 опознан по формату PID (эвристика)."
+                }
+                else -> notes += "Регистр ${idAddress?.hex32()} = ${idValue.hex32()}: формат не опознан."
+            }
+        } else if (romValid && rom?.designer == Jep106.ST) {
+            vendor = McuVendor.STM32
+            part = Stm32.find(rom.partNo)
+            flashAddr = part?.flashSizeAddress
+            notes += "DBGMCU_IDCODE не прочитан; серия определена по ROM-таблице."
+        }
+
+        val flashKb = flashAddr?.let { addr ->
+            attempt(notes, "F_SIZE ${addr.hex32()}") { Stm32.flashSizeKb(mem.read16(addr)) }
+        }
+
+        return TargetInfo(
+            cpuId = cpuId,
+            romBase = romBase,
+            romBaseSource = romBaseSource,
+            rom = rom,
+            idRegisterAddress = idAddress,
+            idRegister = idValue,
+            vendor = vendor,
+            stm32Part = part,
+            flashSizeAddress = flashAddr,
+            flashSizeKb = flashKb,
+            notes = notes,
+        )
+    }
+
+    private inline fun <T> attempt(notes: MutableList<String>, what: String, block: () -> T): T? =
+        try {
+            block()
+        } catch (e: StLinkException) {
+            if (e.kind != StLinkErrorKind.SWD_FAULT && e.kind != StLinkErrorKind.BAD_ARGUMENT) throw e
+            notes += "$what: ${e.message}"
+            null
+        }
+}
