@@ -46,5 +46,6 @@ dependencies {
     implementation(project(":recorder"))
     implementation(project(":telemetry"))
     implementation(project(":diag"))
+    implementation(project(":firmware"))
     testImplementation(libs.junit)
 }
