@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HW Live Test</string>
+    <string name="btn_scan">Найти ST-Link</string>
+    <string name="btn_connect">Подключить и опознать</string>
+    <string name="btn_read_word">Прочитать слово</string>
+    <string name="btn_copy_log">Копировать журнал</string>
+    <string name="btn_clear_log">Очистить</string>
+    <string name="section_adapter">Адаптер</string>
+    <string name="section_target">Микроконтроллер</string>
+    <string name="section_memory">Память (только чтение)</string>
+    <string name="section_log">Журнал обмена</string>
+    <string name="address_hint">адрес, например E000ED00</string>
+    <string name="log_copied">Журнал скопирован</string>
+    <string name="status_idle">Подключите ST-Link к телефону через OTG-переходник.</string>
+</resources>
