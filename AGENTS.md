@@ -114,3 +114,6 @@ npx --yes markdownlint-cli2@0.18.1 "**/*.md"
 - Шаблоны `.gitignore` без `/` в начале действуют на любом уровне: `captures/`
   скрыл `stlink/src/test/resources/captures`. Перед коммитом агент проверяет
   `git status --ignored`.
+- Без Android SDK агент проверяет `app` компиляцией kotlinc против настоящего
+  `android.jar` (API 35), а не самописных заглушек: заглушки пропустили метод
+  `onStart()`, который совпал с методом жизненного цикла `Activity`.

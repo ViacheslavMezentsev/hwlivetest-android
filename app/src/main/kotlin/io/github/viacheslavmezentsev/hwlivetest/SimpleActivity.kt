@@ -65,7 +65,7 @@ class SimpleActivity : Activity() {
         val fields = findViewById<Button>(R.id.toolFields)
         tools = listOf(backup, check)
 
-        start.setOnClickListener { onStart() }
+        start.setOnClickListener { onStartPressed() }
         backup.setOnClickListener { askBackupFile() }
         check.setOnClickListener { askHexFile() }
         fields.setOnClickListener { startActivity(Intent(this, MainActivity::class.java)) }
@@ -154,7 +154,7 @@ class SimpleActivity : Activity() {
         tools.forEach { it.isEnabled = Session.stlink != null }
     }
 
-    private fun onStart() {
+    private fun onStartPressed() {
         if (running) {
             cancel = true
             step.text = "Останавливаю…"
