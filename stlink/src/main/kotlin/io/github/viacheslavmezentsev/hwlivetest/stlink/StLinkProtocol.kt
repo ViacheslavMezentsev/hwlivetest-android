@@ -164,6 +164,9 @@ object StLinkProtocol {
         else -> "неизвестный код 0x%02X".format(code)
     }
 
+    /** WAIT от AP или DP: цель занята, запрос можно повторить. */
+    fun isWaitStatus(code: Int): Boolean = code == 0x10 || code == 0x14
+
     /** Коды, означающие, что по SWD никто не ответил на уровне DP. */
     fun isNoTargetStatus(code: Int): Boolean = code == 0x09 || code in 0x14..0x17
 

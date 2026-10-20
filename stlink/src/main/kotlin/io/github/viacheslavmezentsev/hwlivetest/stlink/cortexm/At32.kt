@@ -12,7 +12,8 @@ object At32 {
     /**
      * Эвристика: у STM32 поле REV_ID (биты 31:16) — небольшие значения 0x0000..0x3xxx,
      * а у известных AT32 старшая тетрада PID равна 0x5 или 0x7 (например 0x7005xxxx).
-     * Проверяется на AT32F403A при аппаратном тестировании.
+     * Подтверждено на WeAct AT32F403A: PID 0x70050347, ROM-таблица стандартная ARM
+     * (part 0x4C4), FLASH_SIZE 0x0400 (1024 КБ).
      */
     fun looksLikeAt32(pid: Int, core: CortexCore?): Boolean {
         val top = (pid ushr 28) and 0x0F

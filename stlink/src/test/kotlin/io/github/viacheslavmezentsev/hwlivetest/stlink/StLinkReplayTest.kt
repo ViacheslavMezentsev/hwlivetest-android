@@ -15,7 +15,7 @@ class StLinkReplayTest {
     fun bluePillF103OverV2() {
         val t = ReplayTransport.fromResource("synthetic-v2-f103.txt")
         val log = mutableListOf<String>()
-        val st = StLink(t) { log += it }
+        val st = StLink(t, log = { log += it })
         val c = st.connect()
         assertEquals("V2J37S7", c.version.label)
         assertEquals(StLinkMode.DFU, c.initialMode)
@@ -114,5 +114,41 @@ class StLinkReplayTest {
             assertEquals(StLinkErrorKind.SWD_FAULT, e.kind)
             assertEquals(0x11, e.status)
         }
+    }
+
+    @Test
+    fun waitIsRetriedWithBackoff() {
+        val t = ReplayTransport.parse(
+            """
+            > f2 36 20 7a ff 1f
+            < 14 00 00 00 00 00 00 00
+            > f2 36 20 7a ff 1f
+            < 10 00 00 00 00 00 00 00
+            > f2 36 20 7a ff 1f
+            < 80 00 00 00 00 c0 00 02
+            """.trimIndent(),
+        )
+        val delays = mutableListOf<Long>()
+        val log = mutableListOf<String>()
+        val st = StLink(t, log = { log += it }, sleep = { delays += it })
+        assertEquals(0x0200C000, st.read32(0x1FFF7A20L))
+        assertEquals(listOf(1L, 2L), delays)
+        assertEquals(2, log.count { it.startsWith("#") && "повтор" in it })
+        t.assertFinished()
+    }
+
+    @Test
+    fun waitGivesUpAfterRetries() {
+        val text = (1..3).joinToString("\n") { "> f2 36 00 ed 00 e0\n< 14 00 00 00 00 00 00 00" }
+        val t = ReplayTransport.parse(text)
+        try {
+            StLink(t, waitRetries = 2, sleep = {}).read32(0xE000ED00L)
+            fail("ожидалась ошибка")
+        } catch (e: StLinkException) {
+            assertEquals(StLinkErrorKind.SWD_FAULT, e.kind)
+            assertEquals(0x14, e.status)
+            assertTrue(e.message!!, e.message!!.contains("после 2 повторов"))
+        }
+        t.assertFinished()
     }
 }

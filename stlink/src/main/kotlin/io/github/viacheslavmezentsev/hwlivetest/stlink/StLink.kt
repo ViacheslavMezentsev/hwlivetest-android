@@ -22,6 +22,9 @@ data class StLinkConnection(
 class StLink(
     private val transport: StLinkTransport,
     private val log: (String) -> Unit = {},
+    /** Сколько раз повторять чтение при ответе WAIT (цель занята или спит); 0 — не повторять. */
+    private val waitRetries: Int = DEFAULT_WAIT_RETRIES,
+    private val sleep: (Long) -> Unit = { Thread.sleep(it) },
 ) : DebugMemory {
 
     var version: StLinkVersion? = null
@@ -103,31 +106,40 @@ class StLink(
         if (address and 3L != 0L) {
             throw StLinkException(StLinkErrorKind.BAD_ARGUMENT, "Адрес должен быть выровнен на 4: ${address.hex32()}")
         }
-        val r = exchange(StLinkProtocol.readDebugReg(address), StLinkProtocol.READ_REG_LEN)
-        val s = StLinkProtocol.status(r)
-        if (s != StLinkProtocol.STATUS_OK) {
-            throw StLinkException(
-                StLinkErrorKind.SWD_FAULT,
-                "Чтение ${address.hex32()}: ${StLinkProtocol.statusText(s)}",
-                status = s,
-            )
-        }
-        return StLinkProtocol.parseRegValue(r)
+        return readWithWaitRetry(StLinkProtocol.readDebugReg(address), "Чтение ${address.hex32()}")
     }
 
     /** Регистр AP; null, если прошивка не умеет READ_DAP_REG. */
     override fun readApRegister(ap: Int, register: Int): Int? {
         if (version?.supportsDapRegisterRead != true) return null
-        val r = exchange(StLinkProtocol.readDapReg(ap, register), StLinkProtocol.READ_REG_LEN)
-        val s = StLinkProtocol.status(r)
-        if (s != StLinkProtocol.STATUS_OK) {
+        return readWithWaitRetry(StLinkProtocol.readDapReg(ap, register), "AP$ap[0x%02X]".format(register))
+    }
+
+    /**
+     * Чтение регистра с повтором при WAIT. Цель отвечает WAIT, когда шина занята или ядро
+     * в режиме сна, а отладочные часы в DBGMCU_CR не включены (записывать туда мы не можем).
+     * Задержка удваивается: 1, 2, 4, 8, 16 мс.
+     */
+    private fun readWithWaitRetry(command: ByteArray, what: String): Int {
+        var attempt = 0
+        while (true) {
+            val r = exchange(command, StLinkProtocol.READ_REG_LEN)
+            val s = StLinkProtocol.status(r)
+            if (s == StLinkProtocol.STATUS_OK) return StLinkProtocol.parseRegValue(r)
+            if (StLinkProtocol.isWaitStatus(s) && attempt < waitRetries) {
+                val delayMs = 1L shl minOf(attempt, 4)
+                attempt++
+                log("# $what: ${StLinkProtocol.statusText(s)}, повтор $attempt через $delayMs мс")
+                sleep(delayMs)
+                continue
+            }
+            val suffix = if (StLinkProtocol.isWaitStatus(s) && attempt > 0) " (после $attempt повторов)" else ""
             throw StLinkException(
                 StLinkErrorKind.SWD_FAULT,
-                "AP$ap[0x%02X]: ${StLinkProtocol.statusText(s)}".format(register),
+                "$what: ${StLinkProtocol.statusText(s)}$suffix",
                 status = s,
             )
         }
-        return StLinkProtocol.parseRegValue(r)
     }
 
     /** Полная последовательность подключения: версия, режим, напряжение, SWD, IDCODE. */
@@ -165,6 +177,10 @@ class StLink(
             }
             inSwd = false
         }
+    }
+
+    companion object {
+        const val DEFAULT_WAIT_RETRIES = 5
     }
 
     private fun connectError(status: Int): StLinkException =
