@@ -42,7 +42,25 @@ object Stm32 {
         val flashSizeAddressOverride: Long? = null,
     ) {
         val flashSizeAddress: Long? get() = flashSizeAddressOverride ?: family.flashSizeAddress
+
+        /**
+         * Непрерывная SRAM от 0x20000000, КБ — максимум для линейки (у младших моделей
+         * может быть меньше). null — не задано.
+         */
+        val sramKb: Int? get() = SRAM_KB[devId]
     }
+
+    private val SRAM_KB: Map<Int, Int> = mapOf(
+        0x440 to 8, 0x442 to 32, 0x444 to 4, 0x445 to 6, 0x448 to 16,
+        0x410 to 20, 0x412 to 10, 0x414 to 64, 0x418 to 64, 0x420 to 8, 0x428 to 32, 0x430 to 96,
+        0x411 to 128,
+        0x413 to 128, 0x419 to 192, 0x421 to 128, 0x423 to 64, 0x431 to 128, 0x433 to 96,
+        0x434 to 384, 0x441 to 256, 0x458 to 32, 0x463 to 320,
+        0x449 to 320, 0x451 to 512, 0x452 to 256,
+        0x456 to 18, 0x460 to 36, 0x466 to 8, 0x467 to 144,
+        0x468 to 32, 0x469 to 128, 0x479 to 112,
+        0x415 to 128, 0x435 to 64, 0x462 to 160, 0x464 to 40,
+    )
 
     val parts: List<Part> = listOf(
         // F0

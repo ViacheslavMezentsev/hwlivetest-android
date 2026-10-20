@@ -26,6 +26,9 @@ data class TargetInfo(
     val flashSizeKb: Int?,
     val notes: List<String>,
 ) {
+    /** Размер SRAM, если известен по справочнику (только STM32). */
+    val sramKb: Int? get() = stm32Part?.sramKb
+
     /** Короткое имя для строки состояния: серия STM32 или семейство. */
     val shortName: String
         get() = stm32Part?.name ?: vendor.title
