@@ -50,7 +50,7 @@ data class DpIdCode(val raw: Int) {
                 0xBC -> "SW-DP (multidrop)"
                 else -> "DP part 0x%02X".format(partNo)
             }
-            return "$kind v$version, ревизия $revision, ${designer.label}"
+            return "$kind v$version r$revision, ${designer.name ?: designer.label}"
         }
 }
 

@@ -7,8 +7,8 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.hex16
 import io.github.viacheslavmezentsev.hwlivetest.stlink.hex32
 
 enum class McuVendor(val title: String) {
-    STM32("STMicroelectronics STM32"),
-    STM32_COMPATIBLE("STM32-совместимый (возможно, клон)"),
+    STM32("STM32 (ST)"),
+    STM32_COMPATIBLE("STM32-совместимый"),
     AT32("Artery AT32"),
     UNKNOWN("не опознан"),
 }
@@ -26,6 +26,10 @@ data class TargetInfo(
     val flashSizeKb: Int?,
     val notes: List<String>,
 ) {
+    /** Короткое имя для строки состояния: серия STM32 или семейство. */
+    val shortName: String
+        get() = stm32Part?.name ?: vendor.title
+
     /** Строки для экрана и журнала: «параметр — значение». */
     fun summary(): List<Pair<String, String>> = buildList {
         cpuId?.let {
@@ -34,12 +38,12 @@ data class TargetInfo(
         } ?: add("Ядро" to "CPUID не прочитан")
         rom?.let {
             add("ROM-таблица" to "${romBase?.hex32()} ($romBaseSource)")
-            add("Разработчик" to it.designer.label)
+            add("Разработчик" to (it.designer.name ?: it.designer.label))
             add("ROM part" to "${it.partNo.hex12()} rev ${it.revision}")
         }
-        add("Производитель" to vendor.title)
+        add("Семейство" to vendor.title)
         if (idRegisterAddress != null && idRegister != null) {
-            val label = if (vendor == McuVendor.AT32) "DEBUG_IDCODE (PID)" else "DBGMCU_IDCODE"
+            val label = if (vendor == McuVendor.AT32) "PID" else "DBGMCU"
             add(label to "${idRegister.hex32()} @ ${idRegisterAddress.hex32()}")
         }
         if (vendor == McuVendor.STM32 || vendor == McuVendor.STM32_COMPATIBLE) {
@@ -68,7 +72,7 @@ class TargetIdentifier(private val mem: DebugMemory) {
         val apBase = attempt(notes, "MEM-AP BASE") { mem.readApRegister(0, RomTable.AP_BASE_REGISTER) }
         if (apBase != null) {
             romBase = RomTable.baseFromApRegister(apBase)
-            romBaseSource = "MEM-AP BASE ${apBase.hex32()}"
+            romBaseSource = "MEM-AP"
         }
         val rom = romBase?.let { base ->
             attempt(notes, "ROM-таблица") { ComponentId.read(mem, base) }
@@ -99,9 +103,6 @@ class TargetIdentifier(private val mem: DebugMemory) {
                     part = stm.part
                     flashAddr = part?.flashSizeAddress
                     vendor = if (!romValid || rom?.designer == Jep106.ST) McuVendor.STM32 else McuVendor.STM32_COMPATIBLE
-                    if (romValid && rom?.designer == Jep106.ST && rom.partNo != stm.devId) {
-                        notes += "DEV_ID ${stm.devId.hex12()} не совпадает с part ROM-таблицы ${rom.partNo.hex12()}"
-                    }
                     if (vendor == McuVendor.STM32_COMPATIBLE) {
                         notes += "ROM-таблица от «${rom?.designer?.label}», а не ST: возможно, GD32/APM32/CKS32 или другой совместимый."
                     }
@@ -114,10 +115,10 @@ class TargetIdentifier(private val mem: DebugMemory) {
                 else -> notes += "Регистр ${idAddress?.hex32()} = ${idValue.hex32()}: формат не опознан."
             }
         } else if (romValid && rom?.designer == Jep106.ST) {
+            // Part ROM-таблицы у ST не всегда равен DEV_ID (у F411 это 0x411 при DEV_ID 0x431),
+            // поэтому серию по нему не определяем.
             vendor = McuVendor.STM32
-            part = Stm32.find(rom.partNo)
-            flashAddr = part?.flashSizeAddress
-            notes += "DBGMCU_IDCODE не прочитан; серия определена по ROM-таблице."
+            notes += "DBGMCU_IDCODE не прочитан; по ROM-таблице это ST, серия не определена."
         }
 
         val flashKb = flashAddr?.let { addr ->

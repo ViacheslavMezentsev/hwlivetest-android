@@ -12,11 +12,11 @@ object StLinkIds {
     val models: List<StLinkModel> = listOf(
         StLinkModel(0x3748, StLinkGeneration.V2, "ST-Link/V2"),
         StLinkModel(0x374B, StLinkGeneration.V2_1, "ST-Link/V2-1"),
-        StLinkModel(0x3752, StLinkGeneration.V2_1, "ST-Link/V2-1 (без накопителя)"),
+        StLinkModel(0x3752, StLinkGeneration.V2_1, "ST-Link/V2-1 (без MSD)"),
         StLinkModel(0x374E, StLinkGeneration.V3, "STLINK-V3E"),
         StLinkModel(0x374F, StLinkGeneration.V3, "STLINK-V3"),
         StLinkModel(0x3753, StLinkGeneration.V3, "STLINK-V3 (2 VCP)"),
-        StLinkModel(0x3754, StLinkGeneration.V3, "STLINK-V3 (без накопителя)"),
+        StLinkModel(0x3754, StLinkGeneration.V3, "STLINK-V3 (без MSD)"),
     )
 
     fun find(vid: Int, pid: Int): StLinkModel? =
