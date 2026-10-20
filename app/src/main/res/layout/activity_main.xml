@@ -92,6 +92,30 @@
 
         <TextView
             style="@style/SectionTitle"
+            android:text="@string/section_fields" />
+
+        <Button
+            android:id="@+id/btnOpenFields"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_open_fields" />
+
+        <TextView
+            android:id="@+id/fieldsInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:id="@+id/fieldsList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            style="@style/SectionTitle"
             android:text="@string/section_log" />
 
         <LinearLayout

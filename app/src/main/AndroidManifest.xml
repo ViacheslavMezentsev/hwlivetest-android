@@ -30,5 +30,11 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/stlink_device_filter" />
         </activity>
+
+        <activity
+            android:name=".ChartActivity"
+            android:exported="false"
+            android:label="@string/chart_title"
+            android:parentActivityName=".MainActivity" />
     </application>
 </manifest>
