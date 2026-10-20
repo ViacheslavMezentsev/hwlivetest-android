@@ -117,7 +117,7 @@ class TelemetryTest {
             reads++
             if (a == 0x20000004L) throw IllegalStateException("AP FAULT") else 42
         })
-        assertEquals(2, reads)
+        assertEquals(4, reads) // блок из 2 слов не прочитался → по одному слову
         assertEquals(42.0, readings[0].value!!, 0.0)
         assertTrue(readings[1].outOfRange)
         assertEquals("AP FAULT", readings[2].error)
@@ -153,5 +153,45 @@ class TelemetryTest {
         assertEquals("3.25", ChartScale.label(3.25, 0.05))
         assertEquals("100", ChartScale.label(100.0, 20.0))
         assertEquals("0.0", ChartScale.label(0.0, 0.5))
+    }
+
+    @Test
+    fun readPlanMergesNeighboursOnlyInMemory() {
+        // Поля из примера addresses.json: 0x20000C54..0x20000C8C — один блок.
+        val addrs = (0x20000C54L..0x20000C8CL step 4).toList()
+        assertEquals(listOf(ReadPlan.Block(0x20000C54L, 15)), ReadPlan.blocks(addrs))
+        // Разрыв больше 4 слов — два блока; периферия — по одному слову.
+        val b = ReadPlan.blocks(listOf(0x20000000L, 0x20000100L, 0x40020010L, 0x40020014L))
+        assertEquals(4, b.size)
+        // Граница 1 КБ не пересекается.
+        assertEquals(2, ReadPlan.blocks(listOf(0x200003FCL, 0x20000400L)).size)
+        // Невыровненные адреса не читаются.
+        assertTrue(ReadPlan.blocks(listOf(0x20000002L)).isEmpty())
+    }
+
+    @Test
+    fun samplerUsesBlocksAndFallsBackToWords() {
+        val fields = listOf(
+            Field("/a", FieldKind.UINT32, 0x20000000),
+            Field("/b", FieldKind.UINT32, 0x20000008),
+            Field("/c", FieldKind.UINT32, 0x2000000C),
+        )
+        val calls = mutableListOf<Pair<Long, Int>>()
+        val s = FieldSampler(fields)
+        val r = s.sample(0, readBlock = { a, n ->
+            calls += a to n
+            IntArray(n) { (a + 4L * it).toInt() and 0xFF }
+        })
+        assertEquals(listOf(0x20000000L to 4), calls)
+        assertEquals(listOf(0.0, 8.0, 12.0), r.map { it.value })
+
+        calls.clear()
+        val r2 = s.sample(1, readBlock = { a, n ->
+            calls += a to n
+            if (n > 1 || a == 0x20000008L) throw IllegalStateException("AP FAULT") else intArrayOf(7)
+        })
+        assertEquals(listOf(0x20000000L to 4, 0x20000000L to 1, 0x20000008L to 1, 0x2000000CL to 1), calls)
+        assertEquals(7.0, r2[0].value!!, 0.0)
+        assertEquals("AP FAULT", r2[1].error)
     }
 }
