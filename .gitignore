@@ -9,7 +9,9 @@ build/
 *.iml
 .cxx/
 .externalNativeBuild/
-captures/
+# снимки профилировщика Android Studio (только в корне,
+# не путать с stlink/src/test/resources/captures)
+/captures/
 .navigation/
 
 # Локальные настройки (путь к SDK и т. п.)

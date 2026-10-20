@@ -1,0 +1,48 @@
+# ST-Link/V2 V2J37S7 + STM32F103CB (BluePill-Plus)
+# GET_VERSION
+> f1 80
+< 29 47 83 04 48 37
+# GET_CURRENT_MODE -> DFU, выход из DFU
+> f5
+< 00 00
+> f3 07
+# GET_TARGET_VOLTAGE: adc0=1580, adc1=2160 -> 3.28 В
+> f7
+< 2c 06 00 00 70 08 00 00
+# ENTER SWD
+> f2 30 a3
+< 80 00
+# READ_IDCODES -> 0x1BA01477
+> f2 31
+< 80 00 00 00 77 14 a0 1b 00 00 00 00
+# CPUID -> 0x411FC231 (Cortex-M3 r1p1)
+> f2 36 00 ed 00 e0
+< 80 00 00 00 31 c2 1f 41
+# MEM-AP BASE -> 0xE00FF003
+> f2 45 00 00 f8
+< 80 00 00 00 03 f0 0f e0
+# ROM-таблица: PIDR0..3, PIDR4, CIDR0..3
+> f2 36 e0 ff 0f e0
+< 80 00 00 00 10 00 00 00
+> f2 36 e4 ff 0f e0
+< 80 00 00 00 04 00 00 00
+> f2 36 e8 ff 0f e0
+< 80 00 00 00 0a 00 00 00
+> f2 36 ec ff 0f e0
+< 80 00 00 00 00 00 00 00
+> f2 36 d0 ff 0f e0
+< 80 00 00 00 00 00 00 00
+> f2 36 f0 ff 0f e0
+< 80 00 00 00 0d 00 00 00
+> f2 36 f4 ff 0f e0
+< 80 00 00 00 10 00 00 00
+> f2 36 f8 ff 0f e0
+< 80 00 00 00 05 00 00 00
+> f2 36 fc ff 0f e0
+< 80 00 00 00 b1 00 00 00
+# DBGMCU_IDCODE -> 0x20036410
+> f2 36 00 20 04 e0
+< 80 00 00 00 10 64 03 20
+# F_SIZE @ 0x1FFFF7E0 -> 128 КБ
+> f2 36 e0 f7 ff 1f
+< 80 00 00 00 80 00 ff ff
