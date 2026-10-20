@@ -4,6 +4,7 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.CortexCore
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.Jep106
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.McuVendor
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.TargetIdentifier
+import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.TargetInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,6 +38,77 @@ class PhoneCaptureTest {
         assertEquals("STM32F411xC/E", info.shortName)
 
         repeat(2) { assertEquals(0x410FC241, st.read32(0xE000ED00L)) }
+        t.assertFinished()
+    }
+
+    private fun identify(name: String, waitRetries: Int = StLink.DEFAULT_WAIT_RETRIES): Triple<ReplayTransport, StLink, TargetInfo> {
+        val t = ReplayTransport.fromResource(name)
+        val st = StLink(t, waitRetries = waitRetries, sleep = {})
+        st.connect()
+        return Triple(t, st, TargetIdentifier(st).identify())
+    }
+
+    @Test
+    fun stm32f103OverV21() {
+        val (t, st, info) = identify("phone-v21-stm32f103.txt")
+        assertEquals("V2J43M28", st.version?.label)
+        assertEquals(CortexCore.M3, info.cpuId?.core)
+        assertEquals("r1p1", info.cpuId?.revisionLabel)
+        assertEquals(0x410, info.rom?.partNo)
+        assertEquals(McuVendor.STM32, info.vendor)
+        assertEquals(0x410, info.stm32Part?.devId)
+        assertEquals(128, info.flashSizeKb)
+        assertTrue(info.notes.toString(), info.notes.isEmpty())
+        t.assertFinished()
+    }
+
+    @Test
+    fun at32f403aOverV21() {
+        val (t, _, info) = identify("phone-v21-at32f403a.txt")
+        assertEquals(CortexCore.M4, info.cpuId?.core)
+        assertEquals(Jep106.ARM, info.rom?.designer)
+        assertEquals(0x4C4, info.rom?.partNo)
+        assertEquals(McuVendor.AT32, info.vendor)
+        assertEquals(0x70050347, info.idRegister)
+        assertEquals(1024, info.flashSizeKb)
+        t.assertFinished()
+    }
+
+    @Test
+    fun nucleoF030r8OnboardV21() {
+        val (t, st, info) = identify("phone-v21-nucleo-f030r8.txt")
+        assertEquals("V2J45M31", st.version?.label)
+        assertEquals("0483:374B", st.version?.vidPid)
+        assertEquals(CortexCore.M0, info.cpuId?.core)
+        assertEquals(0x40015800L, info.idRegisterAddress)
+        assertEquals(0x440, info.stm32Part?.devId)
+        assertEquals(64, info.flashSizeKb)
+        assertTrue(info.notes.toString(), info.notes.isEmpty())
+        t.assertFinished()
+    }
+
+    /** Записано старой версией без повторов: WAIT попадает в заметки, остальное читается. */
+    @Test
+    fun stm32f401WithDpWaitWithoutRetries() {
+        val (t, st, info) = identify("phone-v21-stm32f401-wait.txt", waitRetries = 0)
+        assertEquals(null, info.cpuId)
+        assertEquals(null, info.rom)
+        assertEquals(0x423, info.stm32Part?.devId)
+        assertEquals(null, info.flashSizeKb)
+        assertEquals(3, info.notes.count { "DP WAIT" in it })
+        assertEquals(0x410FC241, st.read32(0xE000ED00L))
+        t.assertFinished()
+    }
+
+    @Test
+    fun f429iDiscoOnboardV2StartsInDfu() {
+        val (t, st, info) = identify("phone-v2-f429idisco-wait.txt", waitRetries = 0)
+        assertEquals("V2J39S0", st.version?.label)
+        assertEquals(CortexCore.M4, info.cpuId?.core)
+        assertEquals(0x411, info.rom?.partNo)
+        assertEquals("STM32F42x/43x", info.shortName)
+        assertEquals(null, info.flashSizeKb)
+        assertTrue(info.notes.single().contains("DP WAIT"))
         t.assertFinished()
     }
 }
