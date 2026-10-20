@@ -9,6 +9,9 @@ interface DebugMemory {
 
     /** Регистр AP или null, если отладчик этого не умеет. */
     fun readApRegister(ap: Int, register: Int): Int? = null
+
+    /** [words] слов подряд с выровненного адреса. По умолчанию — по одному слову. */
+    fun readBlock(address: Long, words: Int): IntArray = IntArray(words) { read32(address + 4L * it) }
 }
 
 /** Читает 16-битное значение по произвольному чётному адресу через выровненное слово. */

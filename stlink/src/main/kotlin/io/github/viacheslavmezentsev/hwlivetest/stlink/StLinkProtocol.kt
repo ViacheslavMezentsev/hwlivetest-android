@@ -26,6 +26,12 @@ object StLinkProtocol {
     const val DEBUG_APIV2_READ_IDCODES = 0x31
     const val DEBUG_APIV2_READDEBUGREG = 0x36
     const val DEBUG_APIV2_READ_DAP_REG = 0x45
+    const val DEBUG_READMEM_32BIT = 0x07
+    const val DEBUG_APIV2_GETLASTRWSTATUS = 0x3B
+    const val DEBUG_APIV2_GETLASTRWSTATUS2 = 0x3E
+
+    /** Наибольший блок за одну команду: автоинкремент TAR гарантирован в пределах 1 КБ. */
+    const val MAX_BLOCK_BYTES = 1024
     const val DEBUG_ENTER_SWD = 0xA3
 
     /** DP-регистры адресуются «портом» 0xFFFF в команде READ_DAP_REG. */
@@ -68,6 +74,22 @@ object StLinkProtocol {
         Hex.putU32le(out, 2, address)
         return out
     }
+
+    /** Чтение [length] байт (кратно 4) с выровненного адреса через MEM-AP 0. */
+    fun readMem32(address: Long, length: Int): ByteArray {
+        require(address and 3L == 0L && length % 4 == 0 && length in 4..MAX_BLOCK_BYTES) {
+            "Блок: адрес ${address.hex32()}, длина $length"
+        }
+        require((address and 0x3FFL) + length <= 0x400L) { "Блок пересекает границу 1 КБ: ${address.hex32()} + $length" }
+        val out = cmd(DEBUG_COMMAND, DEBUG_READMEM_32BIT)
+        Hex.putU32le(out, 2, address)
+        Hex.putU16le(out, 6, length)
+        return out
+    }
+
+    /** Состояние последнего чтения/записи памяти: 12 байт (J15+, V3) или 2 байта. */
+    fun getLastRwStatus(extended: Boolean): ByteArray =
+        cmd(DEBUG_COMMAND, if (extended) DEBUG_APIV2_GETLASTRWSTATUS2 else DEBUG_APIV2_GETLASTRWSTATUS)
 
     /** Чтение регистра DP ([port] = [DP_PORT]) или AP ([port] = номер AP). */
     fun readDapReg(port: Int, register: Int): ByteArray {
@@ -222,6 +244,9 @@ data class StLinkVersion(
 
     /** Требуется для чтения напряжения и API v2 на V2. */
     val meetsMinimum: Boolean get() = hw >= 3 || jtag >= MIN_V2_JTAG
+
+    /** GETLASTRWSTATUS2 (12 байт): V2 с J15, любой V3. */
+    val hasLastRwStatus2: Boolean get() = hw >= 3 || jtag >= 15
 
     /** Чтение регистров DP/AP командой READ_DAP_REG: V2 с J24, любой V3. */
     val supportsDapRegisterRead: Boolean get() = hw >= 3 || jtag >= 24

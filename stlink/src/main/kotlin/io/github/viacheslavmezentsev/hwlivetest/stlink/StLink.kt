@@ -38,7 +38,8 @@ class StLink(
             transport.write(command)
             if (responseLength == 0) return ByteArray(0)
             val r = transport.read(responseLength)
-            log("< " + Hex.bytes(r))
+            // Длинные ответы (блоки памяти) в журнале сокращаются: они не нужны для записей.
+            log(if (r.size <= LOG_MAX_BYTES) "< " + Hex.bytes(r) else "# < ${r.size} байт: " + Hex.bytes(r, LOG_MAX_BYTES) + " …")
             if (r.size < responseLength) {
                 throw StLinkException(
                     StLinkErrorKind.PROTOCOL,
@@ -107,6 +108,51 @@ class StLink(
             throw StLinkException(StLinkErrorKind.BAD_ARGUMENT, "Адрес должен быть выровнен на 4: ${address.hex32()}")
         }
         return readWithWaitRetry(StLinkProtocol.readDebugReg(address), "Чтение ${address.hex32()}")
+    }
+
+    /**
+     * Чтение [words] слов подряд командой READMEM_32BIT, блоками до 1 КБ, не пересекая
+     * границ 1 КБ. После каждого блока проверяется состояние (GETLASTRWSTATUS);
+     * при WAIT блок читается заново.
+     */
+    override fun readBlock(address: Long, words: Int): IntArray {
+        if (address and 3L != 0L) {
+            throw StLinkException(StLinkErrorKind.BAD_ARGUMENT, "Адрес должен быть выровнен на 4: ${address.hex32()}")
+        }
+        val out = IntArray(words)
+        var done = 0
+        while (done < words) {
+            val a = address + 4L * done
+            val room = ((0x400L - (a and 0x3FFL)) / 4).toInt()
+            val n = minOf(words - done, room, StLinkProtocol.MAX_BLOCK_BYTES / 4)
+            val data = readBlockOnce(a, n)
+            for (k in 0 until n) out[done + k] = Hex.u32le(data, 4 * k)
+            done += n
+        }
+        return out
+    }
+
+    private fun readBlockOnce(address: Long, words: Int): ByteArray {
+        val extended = version?.hasLastRwStatus2 ?: true
+        val statusLen = if (extended) 12 else 2
+        var attempt = 0
+        while (true) {
+            val data = exchange(StLinkProtocol.readMem32(address, 4 * words), 4 * words)
+            val s = StLinkProtocol.status(exchange(StLinkProtocol.getLastRwStatus(extended), statusLen))
+            if (s == StLinkProtocol.STATUS_OK) return data
+            if (StLinkProtocol.isWaitStatus(s) && attempt < waitRetries) {
+                val delayMs = 1L shl minOf(attempt, 4)
+                attempt++
+                log("# Блок ${address.hex32()}: ${StLinkProtocol.statusText(s)}, повтор $attempt через $delayMs мс")
+                sleep(delayMs)
+                continue
+            }
+            throw StLinkException(
+                StLinkErrorKind.SWD_FAULT,
+                "Блок ${address.hex32()}+${4 * words}: ${StLinkProtocol.statusText(s)}",
+                status = s,
+            )
+        }
     }
 
     /** Регистр AP; null, если прошивка не умеет READ_DAP_REG. */
@@ -181,6 +227,7 @@ class StLink(
 
     companion object {
         const val DEFAULT_WAIT_RETRIES = 5
+        private const val LOG_MAX_BYTES = 16
     }
 
     private fun connectError(status: Int): StLinkException =
