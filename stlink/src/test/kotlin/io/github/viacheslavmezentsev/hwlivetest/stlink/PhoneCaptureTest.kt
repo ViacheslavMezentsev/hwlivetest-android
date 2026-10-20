@@ -10,10 +10,10 @@ import org.junit.Test
 
 class PhoneCaptureTest {
 
-    /** Настоящая запись с телефона: V2-1 от Nucleo + BlackPill F411CE. */
+    /** Настоящая запись с телефона: V2-1 от Nucleo + плата с STM32F411. */
     @Test
-    fun blackPillF411OverNucleoV21() {
-        val t = ReplayTransport.fromResource("phone-v21-f411ce.txt")
+    fun stm32f411OverNucleoV21() {
+        val t = ReplayTransport.fromResource("phone-v21-stm32f411.txt")
         val st = StLink(t)
         val c = st.connect()
         assertEquals("V2J45M31", c.version.label)
