@@ -16,5 +16,6 @@ kotlin {
 }
 
 dependencies {
+    api(project(":firmware"))
     testImplementation(libs.junit)
 }
