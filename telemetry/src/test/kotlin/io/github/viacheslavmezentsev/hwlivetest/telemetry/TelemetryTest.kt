@@ -195,4 +195,26 @@ class TelemetryTest {
         assertEquals(7.0, r2[0].value!!, 0.0)
         assertEquals("AP FAULT", r2[1].error)
     }
+
+    @Test
+    fun axisTrackerKeepsAxisWhileDataFits() {
+        val t = AxisTracker()
+        val a1 = t.update(3.2916, 3.2925)
+        // Новое окно чуть уже — ось та же (раньше она пересчитывалась и линия прыгала).
+        assertEquals(a1, t.update(3.2918, 3.2924))
+        // Выход за край — ось расширяется.
+        val a2 = t.update(3.2910, 3.2925)
+        assertTrue(a2.min <= 3.2910)
+        // Данные сжались сильно — ось сужается.
+        val a3 = t.update(3.29200, 3.29202)
+        assertTrue(a3.max - a3.min < a2.max - a2.min)
+    }
+
+    @Test
+    fun ownScaleOnlyForDifferentMagnitudes() {
+        assertFalse(needsOwnScale(listOf(3.292, 3.291)))
+        assertTrue(needsOwnScale(listOf(31.9, 0.0075)))
+        assertFalse(needsOwnScale(listOf(31.9)))
+    }
 }
+

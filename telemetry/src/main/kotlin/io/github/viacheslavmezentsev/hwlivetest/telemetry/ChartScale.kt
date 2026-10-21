@@ -71,3 +71,42 @@ object ChartScale {
         else -> 300_000
     }
 }
+
+/**
+ * Ось Y с гистерезисом: пока значения помещаются в текущую ось, она не меняется;
+ * расширяется сразу, как только значение выходит за край, а сужается, только когда
+ * данные занимают меньше [shrinkBelow] её высоты. Без этого линия «прыгала» вверх-вниз
+ * при каждом уходе старой точки из окна.
+ */
+class AxisTracker(private val shrinkBelow: Double = 0.35) {
+    var axis: ChartScale.Axis? = null
+        private set
+
+    fun update(min: Double?, max: Double?): ChartScale.Axis {
+        val target = ChartScale.yAxis(min, max)
+        val cur = axis
+        if (cur == null || min == null || max == null) {
+            axis = target
+            return target
+        }
+        val span = cur.max - cur.min
+        axis = when {
+            min < cur.min || max > cur.max -> target
+            span > 0 && (max - min) < shrinkBelow * span && (target.max - target.min) < span -> target
+            else -> cur
+        }
+        return axis!!
+    }
+
+    fun reset() {
+        axis = null
+    }
+}
+
+/** Нужна ли каждому ряду своя шкала: средние различаются больше чем в [ratio] раз. */
+fun needsOwnScale(means: List<Double>, ratio: Double = 10.0): Boolean {
+    val a = means.filter { it.isFinite() }.map { kotlin.math.abs(it) }.filter { it > 1e-12 }
+    if (a.size < 2) return false
+    return a.max() / a.min() > ratio
+}
+
