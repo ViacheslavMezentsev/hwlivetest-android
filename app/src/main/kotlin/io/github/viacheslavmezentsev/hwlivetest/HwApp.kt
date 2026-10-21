@@ -16,13 +16,23 @@ class HwApp : Application() {
         Session.logPolling = Prefs.logPolling(this)
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action != UsbManager.ACTION_USB_DEVICE_DETACHED) return
                 val d = intent.usbDevice()
-                Session.detached(d)
-                LogicSession.detached(d)
+                val m = context.getSystemService(Context.USB_SERVICE) as UsbManager
+                when (intent.action) {
+                    // Каждое подключение и отключение — в журнал: видно, замечает ли телефон прибор.
+                    UsbManager.ACTION_USB_DEVICE_ATTACHED ->
+                        d?.let { Session.logLine("# USB подключено: ${UsbInventory.describe(m, it)}") }
+                    UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+                        d?.let { Session.logLine("# USB отключено: %04X:%04X %s".format(it.vendorId, it.productId, it.deviceName)) }
+                        Session.detached(d)
+                        LogicSession.detached(d)
+                    }
+                }
             }
         }
-        val filter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        val filter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED).apply {
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {

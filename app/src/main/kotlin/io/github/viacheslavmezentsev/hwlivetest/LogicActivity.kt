@@ -113,7 +113,8 @@ class LogicActivity : ClockActivity() {
     private fun connect() {
         val d = usb.findDevices().firstOrNull()
         if (d == null) {
-            setStatus("Анализатор не найден. Проверьте OTG-переходник.")
+            setStatus("Анализатор не найден: телефон его не видит. Список устройств USB — в журнале.")
+            UsbInventory.log(this, "анализатор не найден")
             return
         }
         setBusy(true)

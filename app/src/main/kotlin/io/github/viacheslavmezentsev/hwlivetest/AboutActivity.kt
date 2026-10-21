@@ -74,6 +74,9 @@ class AboutActivity : ClockActivity() {
             for (p in Fx2Ids.profiles) appendLine("• ${p.title}: ${p.vidPid}")
             appendLine("• USB-UART (CDC-ACM, CH340, CP210x, FTDI, PL2303): в разработке")
             appendLine()
+            appendLine("УСТРОЙСТВА USB СЕЙЧАС")
+            for (l in UsbInventory.lines(this@AboutActivity)) appendLine("• $l")
+            appendLine()
             appendLine("ДАННЫЕ ПРИЛОЖЕНИЯ")
             append(storageText)
         }
