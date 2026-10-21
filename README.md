@@ -45,7 +45,8 @@ sigrok-cli на компьютере), делает пробный захват 
 одновременно. Концепция платформы — в [архитектуре](docs/architecture.md), требования к модулям —
 в ТЗ: [ST-Link](docs/spec/TECHNICAL_SPECIFICATION_STLINK.md),
 [логический анализатор](docs/spec/TECHNICAL_SPECIFICATION_LOGIC_ANALYZER.md),
-[USB-UART](docs/spec/TECHNICAL_SPECIFICATION_USB_UART.md).
+[USB-UART](docs/spec/TECHNICAL_SPECIFICATION_USB_UART.md),
+[свой анализатор на BlackPill](docs/spec/TECHNICAL_SPECIFICATION_LA_PROBE.md).
 
 ## Поля из addresses.json
 
