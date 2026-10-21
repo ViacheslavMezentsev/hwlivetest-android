@@ -5,9 +5,11 @@ junit = "4.13.2"
 compileSdk = "35"
 minSdk = "26"
 targetSdk = "35"
+usbSerial = "3.9.0"
 
 [libraries]
 junit = { module = "junit:junit", version.ref = "junit" }
+usb-serial = { module = "com.github.mik3y:usb-serial-for-android", version.ref = "usbSerial" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
