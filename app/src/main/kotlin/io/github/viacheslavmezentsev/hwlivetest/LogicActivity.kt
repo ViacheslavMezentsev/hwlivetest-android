@@ -114,7 +114,7 @@ class LogicActivity : ClockActivity() {
         val d = usb.findDevices().firstOrNull()
         if (d == null) {
             setStatus("Анализатор не найден: телефон его не видит. Список устройств USB — в журнале.")
-            UsbInventory.log(this, "анализатор не найден")
+            LogicSession.worker.execute { UsbInventory.logDiagnostics(this, "анализатор не найден") }
             return
         }
         setBusy(true)

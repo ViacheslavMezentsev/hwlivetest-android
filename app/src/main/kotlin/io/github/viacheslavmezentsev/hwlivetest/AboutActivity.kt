@@ -76,6 +76,7 @@ class AboutActivity : ClockActivity() {
             appendLine()
             appendLine("УСТРОЙСТВА USB СЕЙЧАС")
             for (l in UsbInventory.lines(this@AboutActivity)) appendLine("• $l")
+            for (l in UsbInventory.kernelNodes()) appendLine("• ядро: $l")
             appendLine()
             appendLine("ДАННЫЕ ПРИЛОЖЕНИЯ")
             append(storageText)
