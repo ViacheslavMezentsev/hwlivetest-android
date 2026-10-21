@@ -27,4 +27,5 @@ kotlin {
 
 dependencies {
     api(project(":stlink"))
+    api(project(":fx2la"))
 }

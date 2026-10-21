@@ -1,17 +1,12 @@
 package io.github.viacheslavmezentsev.hwlivetest.usb
 
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
-import android.os.Build
 import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkIds
 
 /** Поиск ST-Link, запрос разрешения и открытие bulk-канала. */
@@ -33,30 +28,8 @@ class StLinkUsb(context: Context) {
     fun hasPermission(device: StLinkDevice): Boolean = manager.hasPermission(device.device)
 
     /** Показать системный запрос разрешения; [onResult] вызывается в главном потоке. */
-    fun requestPermission(device: StLinkDevice, onResult: (Boolean) -> Unit) {
-        if (manager.hasPermission(device.device)) {
-            onResult(true)
-            return
-        }
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action != ACTION_USB_PERMISSION) return
-                appContext.unregisterReceiver(this)
-                onResult(intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false))
-            }
-        }
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            appContext.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            appContext.registerReceiver(receiver, filter)
-        }
-        val intent = Intent(ACTION_USB_PERMISSION).setPackage(appContext.packageName)
-        // Система дописывает в intent extras, поэтому PendingIntent должен быть изменяемым.
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
-        val pending = PendingIntent.getBroadcast(appContext, 0, intent, flags)
-        manager.requestPermission(device.device, pending)
-    }
+    fun requestPermission(device: StLinkDevice, onResult: (Boolean) -> Unit) =
+        UsbPermissions.request(appContext, device.device, onResult)
 
     /** Открыть устройство и захватить интерфейс отладки. */
     fun open(device: StLinkDevice): UsbStLinkTransport {
@@ -100,9 +73,5 @@ class StLinkUsb(context: Context) {
             if (out != null && inp != null) return DebugInterface(iface, out, inp)
         }
         return null
-    }
-
-    companion object {
-        const val ACTION_USB_PERMISSION = "io.github.viacheslavmezentsev.hwlivetest.USB_PERMISSION"
     }
 }
