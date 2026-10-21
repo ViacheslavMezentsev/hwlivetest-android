@@ -1,6 +1,6 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
-import android.app.Activity
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -24,7 +24,7 @@ import io.github.viacheslavmezentsev.hwlivetest.telemetry.FieldSampler
 import java.io.File
 
 /** Режим эксперта: адаптер, MCU, чтение слова, поля из addresses.json, журнал. */
-class MainActivity : Activity() {
+class MainActivity : ClockActivity() {
 
     private lateinit var connector: Connector
     private lateinit var logPresenter: LogPresenter

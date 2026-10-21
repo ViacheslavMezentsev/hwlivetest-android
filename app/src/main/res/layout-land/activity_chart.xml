@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Альбомная ориентация: элементы управления — прокручиваемой колонкой слева, график — справа. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="0.36">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/chartTitle"
+                style="@style/ChartTitle" />
+
+            <TextView
+                android:id="@+id/chartValue"
+                style="@style/ChartValue" />
+
+            <TextView
+                android:id="@+id/chartStats"
+                style="@style/ChartStats" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnWindow30s"
+                    style="@style/ChartButton"
+                    android:text="@string/window_30s" />
+
+                <Button
+                    android:id="@+id/btnWindow1m"
+                    style="@style/ChartButton"
+                    android:text="@string/window_1m" />
+
+                <Button
+                    android:id="@+id/btnWindow5m"
+                    style="@style/ChartButton"
+                    android:text="@string/window_5m" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnPause"
+                    style="@style/ChartButton"
+                    android:text="@string/btn_pause" />
+
+                <Button
+                    android:id="@+id/btnRecord"
+                    style="@style/ChartButton"
+                    android:text="@string/record_start" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnFields"
+                    style="@style/ChartButton"
+                    android:text="@string/btn_fields" />
+
+                <Button
+                    android:id="@+id/btnScale"
+                    style="@style/ChartButton"
+                    android:text="@string/scale_shared" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/chartInfo"
+                style="@style/ChartInfo" />
+        </LinearLayout>
+    </ScrollView>
+
+    <io.github.viacheslavmezentsev.hwlivetest.ChartView
+        android:id="@+id/chart"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="8dp"
+        android:layout_weight="0.64" />
+</LinearLayout>

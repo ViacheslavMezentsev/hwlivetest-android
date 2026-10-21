@@ -1,6 +1,6 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
-import android.app.Activity
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -31,7 +31,7 @@ import java.util.concurrent.CancellationException
  * эвристики [Diagnostics]; результат — список разделов. Ниже — инструменты, которые
  * только читают Flash.
  */
-class SimpleActivity : Activity() {
+class SimpleActivity : ClockActivity() {
 
     private lateinit var connector: Connector
     private lateinit var status: TextView

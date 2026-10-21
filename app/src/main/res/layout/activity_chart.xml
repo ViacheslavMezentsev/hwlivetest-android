@@ -7,27 +7,15 @@
 
     <TextView
         android:id="@+id/chartTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fontFamily="monospace"
-        android:textSize="13sp"
-        android:textStyle="bold" />
+        style="@style/ChartTitle" />
 
     <TextView
         android:id="@+id/chartValue"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:fontFamily="monospace"
-        android:textSize="28sp" />
+        style="@style/ChartValue" />
 
     <TextView
         android:id="@+id/chartStats"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fontFamily="monospace"
-        android:textColor="@color/muted"
-        android:textSize="12sp" />
+        style="@style/ChartStats" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -37,30 +25,22 @@
 
         <Button
             android:id="@+id/btnWindow30s"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            style="@style/ChartButton"
             android:text="@string/window_30s" />
 
         <Button
             android:id="@+id/btnWindow1m"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            style="@style/ChartButton"
             android:text="@string/window_1m" />
 
         <Button
             android:id="@+id/btnWindow5m"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            style="@style/ChartButton"
             android:text="@string/window_5m" />
 
         <Button
             android:id="@+id/btnPause"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1.2"
+            style="@style/ChartButton"
             android:text="@string/btn_pause" />
     </LinearLayout>
 
@@ -71,17 +51,18 @@
 
         <Button
             android:id="@+id/btnFields"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            style="@style/ChartButton"
             android:text="@string/btn_fields" />
 
         <Button
             android:id="@+id/btnScale"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/scale_own" />
+            style="@style/ChartButton"
+            android:text="@string/scale_shared" />
+
+        <Button
+            android:id="@+id/btnRecord"
+            style="@style/ChartButton"
+            android:text="@string/record_start" />
     </LinearLayout>
 
     <io.github.viacheslavmezentsev.hwlivetest.ChartView
@@ -93,11 +74,5 @@
 
     <TextView
         android:id="@+id/chartInfo"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:fontFamily="monospace"
-        android:textColor="@color/muted"
-        android:textIsSelectable="true"
-        android:textSize="11sp" />
+        style="@style/ChartInfo" />
 </LinearLayout>

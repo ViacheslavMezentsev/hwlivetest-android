@@ -197,9 +197,14 @@ object Session {
     var lastPollMs: Long = 0
         private set
 
+    /** Идущая запись MCAP; пишется в потоке worker после каждого прохода опроса. */
+    @Volatile
+    var recording: Recording? = null
+
     /**
-     * Периодически читать поля [only] (null — все) с паузой [periodMs] мс между проходами
-     * в потоке worker. [onReadings] и [onStopped] вызываются в потоке worker.
+     * Читать поля [only] (null — все) с периодом [periodMs] мс (fixed rate: 100 мс — ровно
+     * 10 Гц, если проход быстрее периода) в потоке worker. [onReadings] и [onStopped]
+     * вызываются в потоке worker.
      */
     @Synchronized
     fun startPolling(
@@ -211,12 +216,12 @@ object Session {
         stopPolling()
         val s = sampler ?: return
         pollingActive = true
-        poll = worker.scheduleWithFixedDelay({
+        poll = worker.scheduleAtFixedRate({
             val st = stlink
             if (st == null) {
                 stopPolling()
                 onStopped("нет подключения")
-                return@scheduleWithFixedDelay
+                return@scheduleAtFixedRate
             }
             val readable = s.fields.filter { only == null || it.topic in only }
                 .filter { check(it).readable }.map { it.topic }
@@ -224,6 +229,7 @@ object Session {
                 val t = SystemClock.elapsedRealtime()
                 val r = s.sample(nowMs(), readBlock = { a, n -> st.readBlock(a, n) }, only = readable, isFatal = ::isFatal)
                 lastPollMs = SystemClock.elapsedRealtime() - t
+                recording?.write(System.currentTimeMillis() * 1_000_000L, r)
                 onReadings(r)
             } catch (e: Exception) {
                 logLine("# опрос остановлен: ${e.message}")
