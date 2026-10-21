@@ -16,7 +16,10 @@ class HwApp : Application() {
         Session.logPolling = Prefs.logPolling(this)
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action == UsbManager.ACTION_USB_DEVICE_DETACHED) Session.detached(intent.usbDevice())
+                if (intent.action != UsbManager.ACTION_USB_DEVICE_DETACHED) return
+                val d = intent.usbDevice()
+                Session.detached(d)
+                LogicSession.detached(d)
             }
         }
         val filter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)

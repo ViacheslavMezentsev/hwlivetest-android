@@ -1,5 +1,7 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
+import io.github.viacheslavmezentsev.hwlivetest.fx2la.Fx2Exception
+import io.github.viacheslavmezentsev.hwlivetest.fx2la.Fx2Firmware
 import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkErrorKind
 import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkException
 import io.github.viacheslavmezentsev.hwlivetest.usb.UsbAccessException
@@ -28,6 +30,8 @@ object ErrorMessages {
             StLinkErrorKind.PROTOCOL -> "Неожиданный ответ адаптера: ${e.message}"
             StLinkErrorKind.BAD_ARGUMENT -> e.message ?: "Неверный аргумент"
         }
+        is Fx2Exception -> e.message ?: e.kind.name
+        is Fx2Firmware.BadImage -> "Файл прошивки не подходит: ${e.message}."
         is IllegalStateException -> e.message ?: "Неверное состояние"
         else -> "${e.javaClass.simpleName}: ${e.message}"
     }

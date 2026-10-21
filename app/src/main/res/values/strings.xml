@@ -45,4 +45,12 @@
     <string name="record_folder_pick">Выберите папку для записей MCAP — она запомнится.</string>
     <string name="record_folder_saved">Папка для записей сохранена</string>
     <string name="fields_dialog_title">Поля (последнее отмеченное — сверху)</string>
+    <string name="menu_logic">Логический анализатор</string>
+    <string name="la_title">Логический анализатор</string>
+    <string name="la_section_firmware">Прошивка fx2lafw</string>
+    <string name="la_section_device">Анализатор</string>
+    <string name="la_section_capture">Пробный захват</string>
+    <string name="la_btn_firmware">Файл прошивки…</string>
+    <string name="la_btn_connect">Подключить</string>
+    <string name="la_btn_capture">Захват</string>
 </resources>

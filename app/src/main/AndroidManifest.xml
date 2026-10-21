@@ -39,6 +39,12 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".LogicActivity"
+            android:exported="false"
+            android:label="@string/la_title"
+            android:parentActivityName=".MainActivity" />
+
+        <activity
             android:name=".ChartActivity"
             android:exported="false"
             android:label="@string/chart_title"

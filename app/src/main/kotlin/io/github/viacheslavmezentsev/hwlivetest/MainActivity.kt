@@ -102,11 +102,16 @@ class MainActivity : ClockActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, MENU_SIMPLE, 0, R.string.menu_simple)
+        menu.add(0, MENU_LOGIC, 1, R.string.menu_logic)
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            MENU_LOGIC -> {
+                startActivity(Intent(this, LogicActivity::class.java))
+                return true
+            }
             MENU_SIMPLE, android.R.id.home -> {
                 Prefs.setExpert(this, false)
                 finish()
@@ -265,6 +270,7 @@ class MainActivity : ClockActivity() {
         const val SAVED_FIELDS_NAME = "addresses.name"
         private const val LIST_PERIOD_MS = 500L
         private const val MENU_SIMPLE = 1
+        private const val MENU_LOGIC = 2
 
         fun logHeader() {
             Session.logLine(
