@@ -46,7 +46,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: hwlivetest-debug-apk
+          name: hwlivetest-debug-apk-${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 

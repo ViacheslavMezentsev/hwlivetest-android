@@ -103,6 +103,7 @@ class MainActivity : ClockActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, MENU_SIMPLE, 0, R.string.menu_simple)
         menu.add(0, MENU_LOGIC, 1, R.string.menu_logic)
+        menu.add(0, MENU_ABOUT, 2, R.string.menu_about)
         return true
     }
 
@@ -110,6 +111,10 @@ class MainActivity : ClockActivity() {
         when (item.itemId) {
             MENU_LOGIC -> {
                 startActivity(Intent(this, LogicActivity::class.java))
+                return true
+            }
+            MENU_ABOUT -> {
+                startActivity(Intent(this, AboutActivity::class.java))
                 return true
             }
             MENU_SIMPLE, android.R.id.home -> {
@@ -271,6 +276,7 @@ class MainActivity : ClockActivity() {
         private const val LIST_PERIOD_MS = 500L
         private const val MENU_SIMPLE = 1
         private const val MENU_LOGIC = 2
+        private const val MENU_ABOUT = 3
 
         fun logHeader() {
             Session.logLine(

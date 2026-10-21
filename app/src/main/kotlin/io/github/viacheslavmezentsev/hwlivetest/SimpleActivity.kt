@@ -105,6 +105,8 @@ class SimpleActivity : ClockActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, MENU_EXPERT, 0, R.string.menu_expert)
         menu.add(0, MENU_COPY, 1, R.string.menu_copy_report)
+        menu.add(0, MENU_LOGIC, 2, R.string.menu_logic)
+        menu.add(0, MENU_ABOUT, 3, R.string.menu_about)
         return true
     }
 
@@ -113,6 +115,14 @@ class SimpleActivity : ClockActivity() {
             MENU_EXPERT -> {
                 Prefs.setExpert(this, true)
                 startActivity(Intent(this, MainActivity::class.java))
+                return true
+            }
+            MENU_LOGIC -> {
+                startActivity(Intent(this, LogicActivity::class.java))
+                return true
+            }
+            MENU_ABOUT -> {
+                startActivity(Intent(this, AboutActivity::class.java))
                 return true
             }
             MENU_COPY -> {
@@ -350,6 +360,8 @@ class SimpleActivity : ClockActivity() {
         private const val REQUEST_CHECK = 11
         private const val MENU_EXPERT = 1
         private const val MENU_COPY = 2
+        private const val MENU_LOGIC = 3
+        private const val MENU_ABOUT = 4
         private const val FLASH_BASE = 0x08000000L
     }
 }

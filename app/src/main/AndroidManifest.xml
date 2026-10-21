@@ -39,6 +39,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".AboutActivity"
+            android:exported="false"
+            android:label="@string/about_title" />
+
+        <activity
             android:name=".LogicActivity"
             android:exported="false"
             android:label="@string/la_title"
