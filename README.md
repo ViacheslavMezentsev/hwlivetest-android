@@ -30,7 +30,11 @@ Android USB Host API.
 
 Микроконтроллер не останавливается и не сбрасывается, в память ничего не пишется.
 
-Дальше: rosbag, логический анализатор WeAct LogicAnalyzerV1 (FX2).
+Дальше: USB-UART, логический анализатор WeAct LogicAnalyzerV1 (FX2), несколько приборов
+одновременно. Концепция платформы — в [архитектуре](docs/architecture.md), требования к модулям —
+в ТЗ: [ST-Link](docs/spec/TECHNICAL_SPECIFICATION_STLINK.md),
+[логический анализатор](docs/spec/TECHNICAL_SPECIFICATION_LOGIC_ANALYZER.md),
+[USB-UART](docs/spec/TECHNICAL_SPECIFICATION_USB_UART.md).
 
 ## Поля из addresses.json
 
