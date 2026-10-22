@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 // Сведения о сборке для окна «О программе»: коммит, время сборки (UTC), номер запуска CI.
@@ -46,6 +47,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 }
 
@@ -63,5 +65,12 @@ dependencies {
     implementation(project(":telemetry"))
     implementation(project(":diag"))
     implementation(project(":firmware"))
+    // Интерфейс на Jetpack Compose (Material 3): решение владельца 22.10.2026, docs/roadmap.md.
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
+    implementation(libs.androidx.activity.compose)
     testImplementation(libs.junit)
 }

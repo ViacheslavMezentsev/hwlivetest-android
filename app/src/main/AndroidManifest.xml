@@ -48,7 +48,8 @@
         <activity
             android:name=".AboutActivity"
             android:exported="false"
-            android:label="@string/about_title" />
+            android:label="@string/about_title"
+            android:theme="@style/AppTheme.Compose" />
 
         <activity
             android:name=".LogicActivity"

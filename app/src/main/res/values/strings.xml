@@ -55,6 +55,5 @@
     <string name="la_btn_capture">Захват</string>
     <string name="menu_about">О программе</string>
     <string name="about_title">О программе</string>
-    <string name="about_copy">Копировать</string>
     <string name="about_copied">Сведения скопированы</string>
 </resources>
