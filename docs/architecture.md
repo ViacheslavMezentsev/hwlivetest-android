@@ -367,6 +367,7 @@ ST-Link на 10 Гц опроса загружают шину на доли пр
 | :--- | :--- | :--- |
 | `stlink` + часть `usb` | [TECHNICAL_SPECIFICATION_STLINK.md](spec/TECHNICAL_SPECIFICATION_STLINK.md) | обратная разработка по коду, проверенному на оборудовании |
 | `fx2la` | [TECHNICAL_SPECIFICATION_LOGIC_ANALYZER.md](spec/TECHNICAL_SPECIFICATION_LOGIC_ANALYZER.md) | с нуля |
+| `firmware` | [TECHNICAL_SPECIFICATION_FIRMWARE.md](spec/TECHNICAL_SPECIFICATION_FIRMWARE.md) | по коду и по образцу stm32-flasher |
 | прибор на BlackPill и клиент SUMP | [TECHNICAL_SPECIFICATION_LA_PROBE.md](spec/TECHNICAL_SPECIFICATION_LA_PROBE.md) | с нуля, с планом экспериментов |
 | `serial` | [TECHNICAL_SPECIFICATION_USB_UART.md](spec/TECHNICAL_SPECIFICATION_USB_UART.md) | с нуля |
 

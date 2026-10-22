@@ -42,10 +42,14 @@ sigrok-cli на компьютере), делает пробный захват 
 Микроконтроллер не останавливается и не сбрасывается, в память ничего не пишется.
 
 Дальше: USB-UART, логический анализатор WeAct LogicAnalyzerV1 (FX2), несколько приборов
-одновременно. Концепция платформы — в [архитектуре](docs/architecture.md), требования к модулям —
+одновременно. Ближайшие этапы — в [плане работ](docs/roadmap.md): прошивка, стирание и управление
+ядром в
+режиме эксперта и новый внешний вид на Compose. Концепция платформы — в
+[архитектуре](docs/architecture.md), требования к модулям —
 в ТЗ: [ST-Link](docs/spec/TECHNICAL_SPECIFICATION_STLINK.md),
 [логический анализатор](docs/spec/TECHNICAL_SPECIFICATION_LOGIC_ANALYZER.md),
 [USB-UART](docs/spec/TECHNICAL_SPECIFICATION_USB_UART.md),
+[прошивка](docs/spec/TECHNICAL_SPECIFICATION_FIRMWARE.md),
 [свой анализатор на BlackPill](docs/spec/TECHNICAL_SPECIFICATION_LA_PROBE.md).
 
 ## Поля из addresses.json
