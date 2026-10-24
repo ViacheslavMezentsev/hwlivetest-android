@@ -229,7 +229,11 @@ class FlashActivity : ComponentActivity() {
         ui.plan = buildList {
             add("Файл: ${ui.file}, $fileBytes байт")
             addAll(p.lines())
-            if (!ui.backup) add("Резервная копия перед прошивкой отключена")
+            if (!ui.backup) {
+                add("Резервная копия перед прошивкой отключена")
+            } else if (p.units.isNotEmpty()) {
+                add("Резервная копия: ${FlashPlan.unitsText(p.units)}, ${FlashPlan.kb(p.units.sumOf { it.size })}")
+            }
         }
         ui.planAllowed = p.allowed && Session.stlink != null
         ui.hasUnits = p.units.isNotEmpty()
@@ -246,9 +250,10 @@ class FlashActivity : ComponentActivity() {
         appendLine("Адаптер: ${Session.device?.title ?: "?"}, ${Session.stlink?.version?.label ?: ""}")
         if (flash) appendLine("Файл: ${ui.file}, $fileBytes байт\nSHA-256: ${fileSha?.take(16)}…")
         appendLine("Стереть: ${FlashPlan.unitsText(p.units)}")
-        if (p.bytesLost > 0) appendLine("Потеряется вне образа: ${p.bytesLost / 1024} КБ")
+        if (p.bytesLost > 0) appendLine("Потеряется вне образа: ${FlashPlan.kb(p.bytesLost)}")
         if (flash) {
-            appendLine(if (ui.backup) "Резервная копия: да, в папку приложения" else "Резервная копия: ОТКЛЮЧЕНА")
+            val units = "${FlashPlan.unitsText(p.units)}, ${FlashPlan.kb(p.units.sumOf { it.size })}"
+            appendLine(if (ui.backup) "Резервная копия: $units, в папку приложения" else "Резервная копия: ОТКЛЮЧЕНА")
             append(if (ui.run) "После прошивки: сброс и запуск" else "После прошивки: ядро остановлено")
         } else {
             append("После стирания ядро остаётся остановленным")
@@ -309,6 +314,7 @@ class FlashActivity : ComponentActivity() {
                 !cancel
             }
             Session.logLine("# изменение цели: $action…")
+            st.stats.reset()
             val outcome = try {
                 val f = Flasher(st, Session.targetWrite(), layout, psize, canWrite16())
                 op(f, progress)
@@ -345,6 +351,9 @@ class FlashActivity : ComponentActivity() {
                 outcome.mismatches.take(5).forEach { add("  %08X: ожидалось %02X, прочитано %02X".format(it.address, it.expected, it.actual)) }
                 backupFile?.let { add("Резервная копия: ${it.name}") }
                 if (outcome.ok && outcome.running) add("Проверьте работу программы кнопкой «ПУСК» в простом режиме.")
+                if (outcome.steps.isNotEmpty()) add("Шаги:")
+                outcome.steps.forEach { add("  ${it.text}") }
+                st.stats.lines().forEach { add("  $it") }
             }
             runOnUiThread {
                 ui.busy = false
@@ -360,12 +369,13 @@ class FlashActivity : ComponentActivity() {
     }
 
     // ТЗ прошивки 3.1.5, вопрос 10.2.2: резервная копия — в папку приложения.
-    private fun saveBackup(data: ByteArray): File? = try {
+    // Хвост 0xFF каждого участка отбрасывается: после стирания там и так 0xFF.
+    private fun saveBackup(data: List<Segment>): File? = try {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
         val name = (Session.target?.shortName ?: "mcu").replace(Regex("[^A-Za-z0-9_-]"), "_")
-        val used = FlashTools.trimErased(data)
+        val used = data.map { Segment(it.address, FlashTools.trimErased(it.data)) }.filter { it.data.isNotEmpty() }
         File(FlashHistory.backupDir(this), "backup-$name-$stamp.hex").apply {
-            writeText(IntelHex.write(Segment(FlashLayout.FLASH_BASE, used)))
+            writeText(IntelHex.write(used))
         }
     } catch (_: Exception) {
         null
@@ -379,6 +389,8 @@ class FlashActivity : ComponentActivity() {
         ui.busy = true
         ui.result = null
         Session.worker.execute {
+            st.stats.reset()
+            val t0 = System.currentTimeMillis()
             val text = try {
                 val r = FlashTools.check(segs, { a, n -> st.readBlock(a, n) }) { done, total ->
                     runOnUiThread {
@@ -398,10 +410,13 @@ class FlashActivity : ComponentActivity() {
             } catch (e: Exception) {
                 ErrorMessages.describe(e)
             }
+            val bytes = segs.sumOf { it.data.size }
+            val sec = (System.currentTimeMillis() - t0) / 1000.0
+            val timing = listOf("Чтение: ${FlashPlan.kb(bytes)} за ${"%.1f".format(Locale.ROOT, sec)} с") + st.stats.lines()
             runOnUiThread {
                 ui.busy = false
                 ui.progress = null
-                ui.result = text
+                ui.result = text + "\n" + timing.joinToString("\n")
                 ui.resultOk = text.startsWith("Совпадает")
                 ui.report = null
             }
