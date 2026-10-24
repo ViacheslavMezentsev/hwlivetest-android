@@ -58,6 +58,12 @@
             android:theme="@style/AppTheme.Compose" />
 
         <activity
+            android:name=".FlashActivity"
+            android:exported="false"
+            android:label="@string/flash_title"
+            android:theme="@style/AppTheme.Compose" />
+
+        <activity
             android:name=".LogicActivity"
             android:exported="false"
             android:label="@string/la_title"

@@ -5,14 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -30,11 +26,13 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.CoreState
 import io.github.viacheslavmezentsev.hwlivetest.stlink.CortexDebugRegs
 import io.github.viacheslavmezentsev.hwlivetest.stlink.TargetWrite
 import io.github.viacheslavmezentsev.hwlivetest.stlink.hex32
+import io.github.viacheslavmezentsev.hwlivetest.ui.ButtonRow
 import io.github.viacheslavmezentsev.hwlivetest.ui.HwScreen
 import io.github.viacheslavmezentsev.hwlivetest.ui.HwTheme
 import io.github.viacheslavmezentsev.hwlivetest.ui.InfoCard
 import io.github.viacheslavmezentsev.hwlivetest.ui.LocalStatusColors
 import io.github.viacheslavmezentsev.hwlivetest.ui.MonoText
+import io.github.viacheslavmezentsev.hwlivetest.ui.SectionCard
 
 /** Подтверждение действия, меняющего цель (ТЗ прошивки, п. 3.1.2). */
 data class Confirm(val title: String, val text: String, val action: () -> Unit)
@@ -206,13 +204,13 @@ fun TargetScreen(
             core.halted -> status.warn
             else -> status.ok
         }
-        Section("Ядро") {
+        SectionCard("Ядро") {
             Text(core?.title ?: "не прочитано", color = coreColor, style = MaterialTheme.typography.titleMedium)
             if (core != null) Text("DHCSR ${core.dhcsr.hex32()}", style = MonoText, color = status.muted)
             OutlinedButton(onClick = onRefresh, enabled = ui.connected && !ui.busy) { Text("Обновить") }
         }
 
-        Section("Изменение цели") {
+        SectionCard("Изменение цели") {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Switch(checked = ui.writeMode, onCheckedChange = onWriteMode)
                 Text("Режим «Изменение цели»", style = MaterialTheme.typography.bodyLarge)
@@ -224,17 +222,17 @@ fun TargetScreen(
                 color = status.muted,
             )
             val enabled = ui.connected && ui.writeMode && !ui.busy
-            ActionRow(
+            ButtonRow(
                 "Остановить" to { onAction("Остановить ядро") { it.halt() } },
                 "Запустить" to { onAction("Запустить ядро") { it.go() } },
                 enabled = enabled,
             )
-            ActionRow(
+            ButtonRow(
                 "Сброс" to { onAction("Сброс с запуском") { it.reset() } },
                 "Сброс и стоп" to { onAction("Сброс с остановкой") { it.resetHalt() } },
                 enabled = enabled,
             )
-            ActionRow(
+            ButtonRow(
                 "Импульс NRST" to { onAction("Импульс NRST (вывод NRST адаптера подключён к плате)") { it.pulseNrst(); null } },
                 enabled = enabled,
             )
@@ -265,28 +263,5 @@ fun TargetScreen(
             confirmButton = { TextButton(onClick = { onLeave(true) }) { Text("Запустить") } },
             dismissButton = { TextButton(onClick = { onLeave(false) }) { Text("Оставить остановленным") } },
         )
-    }
-}
-
-@Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            content()
-        }
-    }
-}
-
-@Composable
-private fun ActionRow(vararg actions: Pair<String, () -> Unit>, enabled: Boolean) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        for ((label, onClick) in actions) {
-            Button(onClick = onClick, enabled = enabled, modifier = Modifier.weight(1f)) { Text(label) }
-        }
     }
 }

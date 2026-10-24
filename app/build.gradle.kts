@@ -22,7 +22,7 @@ val buildTime: String = buildInstant.toString()
 val versionMinutes: Int = ((buildInstant.epochSecond - Instant.parse("2026-01-01T00:00:00Z").epochSecond) / 60).toInt()
 val ciRun: Int? = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
 // versionName: последнее число увеличивается с каждой сборкой, отданной на установку (AGENTS.md).
-val appVersion = "0.2.1"
+val appVersion = "0.3.0"
 
 android {
     namespace = "io.github.viacheslavmezentsev.hwlivetest"
@@ -80,7 +80,7 @@ dependencies {
     testImplementation(libs.junit)
 }
 
-// Имя APK с версией: hwlivetest-0.2.1-debug.apk — файлы разных сборок не путаются.
+// Имя APK с версией: hwlivetest-<версия>-debug.apk — файлы разных сборок не путаются.
 base {
     archivesName.set("hwlivetest-$appVersion")
 }

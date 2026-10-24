@@ -8,6 +8,7 @@ object Prefs {
     private const val EXPERT = "expert_mode"
     private const val LOG_POLLING = "log_polling"
     private const val RECORD_FOLDER = "record_folder"
+    private const val FLASH_BACKUP = "flash_backup"
 
     fun expert(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(EXPERT, false)
 
@@ -23,4 +24,10 @@ object Prefs {
 
     fun setRecordFolder(c: Context, v: String) =
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString(RECORD_FOLDER, v).apply()
+
+    /** Резервная копия Flash перед прошивкой (ТЗ прошивки 3.1.5), по умолчанию включена. */
+    fun flashBackup(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(FLASH_BACKUP, true)
+
+    fun setFlashBackup(c: Context, v: Boolean) =
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean(FLASH_BACKUP, v).apply()
 }
