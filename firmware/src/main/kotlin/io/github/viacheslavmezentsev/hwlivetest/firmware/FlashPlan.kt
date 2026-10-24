@@ -152,6 +152,6 @@ class FlashPlan(
 
         internal fun hex(a: Long): String = "0x%08X".format(a)
 
-        internal fun kb(n: Int): String = if (n < 1024) "$n байт" else String.format(Locale.ROOT, "%.1f КБ", n / 1024.0)
+        fun kb(n: Int): String = if (n < 1024) "$n байт" else String.format(Locale.ROOT, "%.1f КБ", n / 1024.0)
     }
 }

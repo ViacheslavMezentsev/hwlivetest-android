@@ -227,7 +227,9 @@ class FlashTest {
         assertTrue(w.locked)
         assertTrue(w.halted)
         assertNotNull(r2.hint)
-        assertEquals(512 * 1024, r2.backup!!.size)
+        // ТЗ прошивки 3.1.5 (р.1.2): копия только стираемого сектора 0.
+        assertEquals(listOf(0x08000000L to 16 * 1024), r2.backup!!.map { it.address to it.data.size })
+        assertTrue(r2.steps.any { it.step == FlashStep.BACKUP && it.done == 16 * 1024L })
 
         val c = sim(f411)
         val r3 = flasher(c).flash(FlashPlan.build(image(0x08000000L, 100), f411), backup = true, run = true) { step, _, _ -> step != FlashStep.BACKUP }
@@ -269,5 +271,22 @@ class FlashTest {
         assertTrue(j.contains("a\\\"b.hex"))
         assertTrue(j.contains("строка 1\\nстрока 2"))
         assertTrue(e.report().contains("Длительность: 1.5 с"))
+    }
+
+    /** TC-22: ТЗ прошивки 3.1.5 (р.1.2) — копия смежных единиц — один участок, HEX из нескольких участков разбирается обратно. */
+    @Test
+    fun backupOfErasedUnits() {
+        val s = sim(f103)
+        for (i in s.flash.indices) s.flash[i] = (i % 251).toByte()
+        val img = listOf(Segment(0x08000400L, ByteArray(1500) { 1 }), Segment(0x08003000L, ByteArray(10) { 2 }))
+        val r = flasher(s).flash(FlashPlan.build(img, f103), backup = true, run = false)
+        assertTrue(r.message, r.ok)
+        val b = r.backup!!
+        assertEquals(listOf(0x08000400L to 2048, 0x08003000L to 1024), b.map { it.address to it.data.size })
+        assertEquals((0x400 % 251).toByte(), b[0].data[0])
+        val back = IntelHex.parse(IntelHex.write(b))
+        assertEquals(b.map { it.address }, back.map { it.address })
+        assertArrayEquals(b[1].data, back[1].data)
+        assertTrue(r.steps.map { it.step }.containsAll(listOf(FlashStep.BACKUP, FlashStep.ERASE, FlashStep.WRITE, FlashStep.VERIFY)))
     }
 }

@@ -32,14 +32,36 @@ class StLink(
 
     private var inSwd = false
 
+    /** Замер обмена: сколько времени уходит на USB и на журнал (для отчёта о скорости). */
+    val stats = ExchangeStats()
+
+    private fun logTimed(line: String) {
+        val t = System.nanoTime()
+        log(line)
+        stats.log(System.nanoTime() - t)
+    }
+
+    private fun usbWrite(data: ByteArray) {
+        val t = System.nanoTime()
+        transport.write(data)
+        stats.write(System.nanoTime() - t, data.size)
+    }
+
+    private fun usbRead(length: Int): ByteArray {
+        val t = System.nanoTime()
+        val r = transport.read(length)
+        stats.read(System.nanoTime() - t, r.size)
+        return r
+    }
+
     fun exchange(command: ByteArray, responseLength: Int): ByteArray {
-        log("> " + Hex.bytes(command, trimmedLength(command)))
+        logTimed("> " + Hex.bytes(command, trimmedLength(command)))
         try {
-            transport.write(command)
+            usbWrite(command)
             if (responseLength == 0) return ByteArray(0)
-            val r = transport.read(responseLength)
+            val r = usbRead(responseLength)
             // Длинные ответы (блоки памяти) в журнале сокращаются: они не нужны для записей.
-            log(if (r.size <= LOG_MAX_BYTES) "< " + Hex.bytes(r) else "# < ${r.size} байт: " + Hex.bytes(r, LOG_MAX_BYTES) + " …")
+            logTimed(if (r.size <= LOG_MAX_BYTES) "< " + Hex.bytes(r) else "# < ${r.size} байт: " + Hex.bytes(r, LOG_MAX_BYTES) + " …")
             if (r.size < responseLength) {
                 throw StLinkException(
                     StLinkErrorKind.PROTOCOL,
@@ -59,11 +81,11 @@ class StLink(
      * (ТЗ ST-Link 2.0, п. 3.2.4). Только для [StLinkTargetWrite].
      */
     internal fun sendWithData(command: ByteArray, data: ByteArray) {
-        log("> " + Hex.bytes(command, trimmedLength(command)))
-        log("# > ${data.size} байт: " + Hex.bytes(data, minOf(data.size, LOG_MAX_BYTES)) + if (data.size > LOG_MAX_BYTES) " …" else "")
+        logTimed("> " + Hex.bytes(command, trimmedLength(command)))
+        logTimed("# > ${data.size} байт: " + Hex.bytes(data, minOf(data.size, LOG_MAX_BYTES)) + if (data.size > LOG_MAX_BYTES) " …" else "")
         try {
-            transport.write(command)
-            transport.write(data)
+            usbWrite(command)
+            usbWrite(data)
         } catch (e: IOException) {
             throw StLinkException(StLinkErrorKind.USB_IO, "Ошибка USB: ${e.message}", cause = e)
         }

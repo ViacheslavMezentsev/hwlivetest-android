@@ -60,19 +60,24 @@ object IntelHex {
     }
 
     /** Записать участок в Intel HEX по 16 байт в строке. */
-    fun write(segment: Segment, startAddress: Long? = null): String = buildString {
+    fun write(segment: Segment, startAddress: Long? = null): String = write(listOf(segment), startAddress)
+
+    /** Записать несколько участков (по возрастанию адреса) в один файл. */
+    fun write(segments: List<Segment>, startAddress: Long? = null): String = buildString {
         var upper = -1L
-        var pos = 0
-        while (pos < segment.data.size) {
-            val a = segment.address + pos
-            val hi = a ushr 16
-            if (hi != upper) {
-                record(0x04, 0, byteArrayOf((hi ushr 8).toByte(), hi.toByte()))
-                upper = hi
+        for (segment in segments) {
+            var pos = 0
+            while (pos < segment.data.size) {
+                val a = segment.address + pos
+                val hi = a ushr 16
+                if (hi != upper) {
+                    record(0x04, 0, byteArrayOf((hi ushr 8).toByte(), hi.toByte()))
+                    upper = hi
+                }
+                val lineLen = minOf(16, segment.data.size - pos, (0x10000 - (a and 0xFFFF)).toInt())
+                record(0x00, (a and 0xFFFF).toInt(), segment.data.copyOfRange(pos, pos + lineLen))
+                pos += lineLen
             }
-            val lineLen = minOf(16, segment.data.size - pos, (0x10000 - (a and 0xFFFF)).toInt())
-            record(0x00, (a and 0xFFFF).toInt(), segment.data.copyOfRange(pos, pos + lineLen))
-            pos += lineLen
         }
         startAddress?.let {
             record(0x05, 0, ByteArray(4) { i -> (it ushr (24 - 8 * i)).toByte() })

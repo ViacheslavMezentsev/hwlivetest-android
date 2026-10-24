@@ -28,9 +28,26 @@ data class FlashOutcome(
     val durationMs: Long,
     /** Ядро после операции: true — запущено. */
     val running: Boolean,
-    val backup: ByteArray?,
+    /** Резервная копия стираемых единиц (ТЗ прошивки 3.1.5, р.1.2). */
+    val backup: List<Segment>?,
     val mismatches: List<FlashTools.Mismatch> = emptyList(),
+    /** Длительность шагов — для отчёта и замера скорости (ТЗ прошивки 7.1.1). */
+    val steps: List<StepTime> = emptyList(),
 )
+
+/** Время шага и объём, дошедший до прогресса (байты или единицы). */
+data class StepTime(val step: FlashStep, val ms: Long, val done: Long) {
+    val text: String
+        get() {
+            val speed = if (ms > 0 && done >= 1024 && step != FlashStep.ERASE_CHECK) {
+                ", %.1f КБ/с".format(java.util.Locale.ROOT, done / 1024.0 / (ms / 1000.0))
+            } else {
+                ""
+            }
+            val amount = if (step == FlashStep.ERASE_CHECK || done < 1024) "" else " ${FlashPlan.kb(done.toInt())},"
+            return "${step.title}:$amount ${"%.1f".format(java.util.Locale.ROOT, ms / 1000.0)} с$speed"
+        }
+}
 
 /**
  * Стирание и прошивка (ТЗ прошивки 5.4, 5.5): защита, резервная копия, сброс с остановкой,
@@ -51,21 +68,35 @@ class Flasher(
     private var changed = false
 
     /** Резервная копия текущей операции: возвращается и при неудаче, чтобы её можно было сохранить. */
-    private var backupData: ByteArray? = null
+    private var backupData: List<Segment>? = null
+
+    private val stepTimes = LinkedHashMap<FlashStep, LongArray>()
+    private var lastMark = 0L
+
+    /** Учёт времени шагов: шаг начинается там, где закончился предыдущий. */
+    private fun track(p: FlashProgress): FlashProgress = { step, done, total ->
+        val now = clock.now()
+        val e = stepTimes.getOrPut(step) { longArrayOf(lastMark, now, 0) }
+        e[1] = now
+        e[2] = maxOf(e[2], done)
+        lastMark = now
+        p(step, done, total)
+    }
 
     /**
      * Прошивка по плану (ТЗ прошивки 5.5.1). [backup] — снимать ли резервную копию (п. 3.1.5);
      * [run] — сброс с запуском после успешной сверки (п. 5.6.1).
      */
-    fun flash(plan: FlashPlan, backup: Boolean, run: Boolean, progress: FlashProgress = { _, _, _ -> true }): FlashOutcome =
-        operation(progress) {
+    fun flash(plan: FlashPlan, backup: Boolean, run: Boolean, onProgress: FlashProgress = { _, _, _ -> true }): FlashOutcome =
+        operation {
+            val progress = track(onProgress)
             if (!plan.allowed) refuse(plan.refusals.joinToString("; "))
             // ТЗ прошивки 4.3.3, вопрос 10.2.1: без записи полусловами F1 не прошивается.
             if (!canWrite16 && (layout.family == FlashFamily.F1 || psize == 16)) {
                 refuse("прошивке адаптера нужна запись полусловами (WRITEMEM_16BIT, J26 или новее) — обновите прошивку ST-Link")
             }
             checkProtection(plan.units)
-            val copy = if (backup) readAll(progress).also { backupData = it } else null
+            val copy = if (backup) readUnits(plan.units, progress).also { backupData = it } else null
             withTargetPrepared(progress) {
                 eraseUnits(plan.units, progress)
                 val total = plan.bytesToWrite.toLong()
@@ -90,8 +121,9 @@ class Flasher(
         }
 
     /** Стирание единиц или всей Flash (ТЗ прошивки 5.4.1); ядро остаётся остановленным (п. 5.4.3). */
-    fun erase(units: List<EraseUnit>?, progress: FlashProgress = { _, _, _ -> true }): FlashOutcome =
-        operation(progress) {
+    fun erase(units: List<EraseUnit>?, onProgress: FlashProgress = { _, _, _ -> true }): FlashOutcome =
+        operation {
+            val progress = track(onProgress)
             val list = units ?: layout.units
             checkProtection(list)
             withTargetPrepared(progress) {
@@ -111,30 +143,34 @@ class Flasher(
         val ok: Boolean,
         val kind: FlashErrorKind?,
         val message: String,
-        val backup: ByteArray?,
+        val backup: List<Segment>?,
         val mismatches: List<FlashTools.Mismatch> = emptyList(),
         val running: Boolean = false,
     )
 
     private fun refuse(reason: String): Nothing = throw FlashException(FlashErrorKind.REFUSED, "Отказ: $reason")
 
-    private inline fun operation(progress: FlashProgress, body: () -> Result): FlashOutcome {
+    private fun steps(): List<StepTime> = stepTimes.map { (k, v) -> StepTime(k, v[1] - v[0], v[2]) }
+
+    private inline fun operation(body: () -> Result): FlashOutcome {
         val t0 = clock.now()
         changed = false
         backupData = null
+        stepTimes.clear()
+        lastMark = t0
         return try {
             val r = body()
-            FlashOutcome(r.ok, r.kind, r.message, null, clock.now() - t0, r.running, r.backup, r.mismatches)
+            FlashOutcome(r.ok, r.kind, r.message, null, clock.now() - t0, r.running, r.backup, r.mismatches, steps())
         } catch (e: FlashException) {
             val kind = if (changed && e.kind == FlashErrorKind.CANCELLED) FlashErrorKind.INCOMPLETE else e.kind
-            FlashOutcome(false, kind, e.message ?: kind.title, e.hint ?: hintFor(kind), clock.now() - t0, false, backupData)
+            FlashOutcome(false, kind, e.message ?: kind.title, e.hint ?: hintFor(kind), clock.now() - t0, false, backupData, steps = steps())
         } catch (e: StLinkException) {
             // ТЗ прошивки 5.5.4, 5.5.5: WAIT и потеря связи не повторяются.
             val kind = if (changed) FlashErrorKind.INCOMPLETE else FlashErrorKind.CANCELLED
-            FlashOutcome(false, kind, "${kind.title}: ${e.message}", hintFor(kind), clock.now() - t0, false, backupData)
+            FlashOutcome(false, kind, "${kind.title}: ${e.message}", hintFor(kind), clock.now() - t0, false, backupData, steps = steps())
         } catch (e: FlashTools.CancelledException) {
             val kind = if (changed) FlashErrorKind.INCOMPLETE else FlashErrorKind.CANCELLED
-            FlashOutcome(false, kind, "Отменено пользователем.", hintFor(kind), clock.now() - t0, false, backupData)
+            FlashOutcome(false, kind, "Отменено пользователем.", hintFor(kind), clock.now() - t0, false, backupData, steps = steps())
         }
     }
 
@@ -153,10 +189,27 @@ class Flasher(
         if (hit.isNotEmpty()) refuse("защита записи (WRP) на: ${FlashPlan.unitsText(hit)}")
     }
 
-    // ТЗ прошивки 3.1.5, 5.2.1: вся Flash, блоками по 1 КБ.
-    private fun readAll(progress: FlashProgress): ByteArray {
-        val total = layout.size
-        return FlashTools.read(layout.start, total, { a, n -> mem.readBlock(a, n) }) { d -> progress(FlashStep.BACKUP, d.toLong(), total.toLong()) }
+    /**
+     * ТЗ прошивки 3.1.5 (р.1.2), 5.2.1: копия только тех единиц, что будут стёрты, блоками по 1 КБ;
+     * смежные единицы читаются одним участком. Остальная Flash не меняется и в копии не нужна.
+     */
+    private fun readUnits(units: List<EraseUnit>, progress: FlashProgress): List<Segment> {
+        val total = units.sumOf { it.size.toLong() }
+        val ranges = ArrayList<Pair<Long, Int>>()
+        for (u in units) {
+            val last = ranges.lastOrNull()
+            if (last != null && last.first + last.second == u.address) {
+                ranges[ranges.size - 1] = last.first to last.second + u.size
+            } else {
+                ranges += u.address to u.size
+            }
+        }
+        var base = 0L
+        return ranges.map { (a, n) ->
+            val data = FlashTools.read(a, n, { x, k -> mem.readBlock(x, k) }) { d -> progress(FlashStep.BACKUP, base + d, total) }
+            base += n
+            Segment(a, data)
+        }
     }
 
     /**
