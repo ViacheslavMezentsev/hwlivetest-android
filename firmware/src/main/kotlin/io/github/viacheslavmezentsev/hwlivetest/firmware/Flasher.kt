@@ -7,6 +7,7 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.DebugMemory
 /** Шаг операции для прогресса (ТЗ прошивки 5.5.2). */
 enum class FlashStep(val title: String) {
     CHECK("проверка защиты"),
+    STOP("остановка ядра"),
     BACKUP("резервная копия"),
     HALT("сброс с остановкой"),
     ERASE("стирание"),
@@ -45,7 +46,8 @@ data class StepTime(val step: FlashStep, val ms: Long, val done: Long) {
                 ""
             }
             val amount = if (step == FlashStep.ERASE_CHECK || done < 1024) "" else " ${FlashPlan.kb(done.toInt())},"
-            return "${step.title}:$amount ${"%.1f".format(java.util.Locale.ROOT, ms / 1000.0)} с$speed"
+            val time = if (ms < 1000) "$ms мс" else "%.1f с".format(java.util.Locale.ROOT, ms / 1000.0)
+            return "${step.title}:$amount $time$speed"
         }
 }
 
@@ -69,6 +71,9 @@ class Flasher(
 
     /** Резервная копия текущей операции: возвращается и при неудаче, чтобы её можно было сохранить. */
     private var backupData: List<Segment>? = null
+
+    /** Ядро остановлено ради копии: если до стирания дело не дошло, его надо запустить снова. */
+    private var haltedForBackup = false
 
     private val stepTimes = LinkedHashMap<FlashStep, LongArray>()
     private var lastMark = 0L
@@ -96,7 +101,19 @@ class Flasher(
                 refuse("прошивке адаптера нужна запись полусловами (WRITEMEM_16BIT, J26 или новее) — обновите прошивку ST-Link")
             }
             checkProtection(plan.units)
-            val copy = if (backup) readUnits(plan.units, progress).also { backupData = it } else null
+            // ТЗ прошивки 3.1.5 (р.1.3): копия снимается с остановленным ядром — работающая цель во сне
+            // отвечает WAIT, и чтение идёт в десятки раз медленнее. При отмене до стирания ядро запускается.
+            val copy = if (backup) {
+                if (!progress(FlashStep.STOP, 0, 1)) throw FlashException(FlashErrorKind.CANCELLED, "Отменено до начала изменений.")
+                if (!tw.coreState().halted) {
+                    tw.halt()
+                    haltedForBackup = true
+                }
+                progress(FlashStep.STOP, 1, 1)
+                readUnits(plan.units, progress).also { backupData = it }
+            } else {
+                null
+            }
             withTargetPrepared(progress) {
                 eraseUnits(plan.units, progress)
                 val total = plan.bytesToWrite.toLong()
@@ -150,6 +167,16 @@ class Flasher(
 
     private fun refuse(reason: String): Nothing = throw FlashException(FlashErrorKind.REFUSED, "Отказ: $reason")
 
+    /** Изменений не было, а ядро остановили ради копии — вернуть его в работу. */
+    private fun resumeIfUntouched() {
+        if (!changed && haltedForBackup) {
+            try {
+                tw.go()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun steps(): List<StepTime> = stepTimes.map { (k, v) -> StepTime(k, v[1] - v[0], v[2]) }
 
     private inline fun operation(body: () -> Result): FlashOutcome {
@@ -158,17 +185,21 @@ class Flasher(
         backupData = null
         stepTimes.clear()
         lastMark = t0
+        haltedForBackup = false
         return try {
             val r = body()
             FlashOutcome(r.ok, r.kind, r.message, null, clock.now() - t0, r.running, r.backup, r.mismatches, steps())
         } catch (e: FlashException) {
+            resumeIfUntouched()
             val kind = if (changed && e.kind == FlashErrorKind.CANCELLED) FlashErrorKind.INCOMPLETE else e.kind
             FlashOutcome(false, kind, e.message ?: kind.title, e.hint ?: hintFor(kind), clock.now() - t0, false, backupData, steps = steps())
         } catch (e: StLinkException) {
+            resumeIfUntouched()
             // ТЗ прошивки 5.5.4, 5.5.5: WAIT и потеря связи не повторяются.
             val kind = if (changed) FlashErrorKind.INCOMPLETE else FlashErrorKind.CANCELLED
             FlashOutcome(false, kind, "${kind.title}: ${e.message}", hintFor(kind), clock.now() - t0, false, backupData, steps = steps())
         } catch (e: FlashTools.CancelledException) {
+            resumeIfUntouched()
             val kind = if (changed) FlashErrorKind.INCOMPLETE else FlashErrorKind.CANCELLED
             FlashOutcome(false, kind, "Отменено пользователем.", hintFor(kind), clock.now() - t0, false, backupData, steps = steps())
         }

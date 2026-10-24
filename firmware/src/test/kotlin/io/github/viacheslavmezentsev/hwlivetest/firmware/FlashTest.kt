@@ -235,6 +235,8 @@ class FlashTest {
         val r3 = flasher(c).flash(FlashPlan.build(image(0x08000000L, 100), f411), backup = true, run = true) { step, _, _ -> step != FlashStep.BACKUP }
         assertEquals(FlashErrorKind.CANCELLED, r3.kind)
         assertTrue(c.regWrites.isEmpty())
+        // ТЗ прошивки 3.1.5 (р.1.3): ядро, остановленное ради копии, снова запущено.
+        assertFalse(c.halted)
     }
 
     /** TC-13: ТЗ прошивки 5.5.6. */
@@ -288,5 +290,20 @@ class FlashTest {
         assertEquals(b.map { it.address }, back.map { it.address })
         assertArrayEquals(b[1].data, back[1].data)
         assertTrue(r.steps.map { it.step }.containsAll(listOf(FlashStep.BACKUP, FlashStep.ERASE, FlashStep.WRITE, FlashStep.VERIFY)))
+    }
+
+    /** TC-23: ТЗ прошивки 3.1.5 (р.1.3) — копия читается при остановленном ядре. */
+    @Test
+    fun backupReadsWithCoreHalted() {
+        val s = sim(f411)
+        var haltedDuringBackup = false
+        val r = flasher(s).flash(FlashPlan.build(image(0x08000000L, 100), f411), backup = true, run = true) { step, _, _ ->
+            if (step == FlashStep.BACKUP) haltedDuringBackup = s.halted
+            true
+        }
+        assertTrue(r.message, r.ok)
+        assertTrue(haltedDuringBackup)
+        assertFalse(s.halted)
+        assertTrue(r.steps.first().step == FlashStep.STOP)
     }
 }
