@@ -25,22 +25,21 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.*
 fun ExpertScreen(
     ui: ExpertUi,
     onBack: () -> Unit,
-    onScan: () -> Unit,
     onConnect: () -> Unit,
     onRead: (String) -> Unit,
     onOpen: () -> Unit,
     onChart: (Field) -> Unit,
-    onNavigate: (Class<out Activity>) -> Unit,
 ) {
+    val debug by Session.debugDetails.collectAsState()
     var address by rememberSaveable { mutableStateOf("E000ED00") }
     var query by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("") }
     var groupingName by rememberSaveable { mutableStateOf(FieldCatalog.Grouping.SOURCE.name) }
     var collapsed by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    val grouping = FieldCatalog.Grouping.valueOf(groupingName)
+    val grouping = if (debug) FieldCatalog.Grouping.valueOf(groupingName) else FieldCatalog.Grouping.NONE
     val types = remember(ui.fields) { ui.fields.map { it.typeLabel }.distinct().sorted() }
     // Новый ELF/JSON может не содержать ранее выбранный тип.
-    val activeType = type.takeIf { it in types } ?: ""
+    val activeType = if (debug) type.takeIf { it in types } ?: "" else ""
     val filtered = remember(ui.fields, query, activeType) { FieldCatalog.filter(ui.fields, query, activeType) }
     val groups = remember(filtered, grouping) { FieldCatalog.group(filtered, grouping) }
     val colors = LocalStatusColors.current
@@ -61,13 +60,13 @@ fun ExpertScreen(
                             Connector.Tone.OK -> colors.ok
                             else -> MaterialTheme.colorScheme.onSurface
                         })
-                    ButtonRow("Найти" to onScan, "Подключить и опознать" to onConnect, enabled = !ui.busy)
+                    if (!ui.connected) ButtonRow("Подключить" to onConnect, enabled = !ui.busy)
                     if (ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
             }
-            if (ui.adapter.isNotBlank()) item(key = "adapter") { InfoCard("Адаптер", ui.adapter.lines(), mono = true, collapsible = true) }
-            if (ui.target.isNotBlank()) item(key = "target") { InfoCard("Микроконтроллер", ui.target.lines(), mono = true, collapsible = true) }
-            item(key = "read") {
+            if (debug && ui.adapter.isNotBlank()) item(key = "adapter") { InfoCard("Адаптер", ui.adapter.lines(), mono = true, collapsible = true) }
+            if (debug && ui.target.isNotBlank()) item(key = "target") { InfoCard("Микроконтроллер", ui.target.lines(), mono = true, collapsible = true) }
+            if (debug) item(key = "read") {
                 SectionCard("Чтение слова", collapsible = true) {
                     OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Адрес (hex)") },
                         singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -79,15 +78,15 @@ fun ExpertScreen(
                 SectionCard("Сигналы") {
                     Text(ui.fieldsInfo, style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = onOpen, enabled = !ui.busy) { Text("Открыть addresses.json") }
-                    Text("Имена топиков из файла сохраняются для графиков и MCAP.", style = MaterialTheme.typography.bodySmall)
+                    if (debug) Text("Имена топиков из файла сохраняются для графиков и MCAP.", style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Поиск: имя, путь, тип, адрес") }, singleLine = true)
-                    CatalogChoice("Группа: " + grouping.title,
+                        label = { Text(if (debug) "Поиск: имя, путь, тип, адрес" else "Поиск сигнала") }, singleLine = true)
+                    if (debug) CatalogChoice("Группа: " + grouping.title,
                         FieldCatalog.Grouping.entries.map { it.name to it.title }) { groupingName = it; collapsed = emptyList() }
-                    CatalogChoice("Тип: " + activeType.ifEmpty { "все" }, listOf("" to "Все типы") + types.map { it to it }) { type = it }
+                    if (debug) CatalogChoice("Тип: " + activeType.ifEmpty { "все" }, listOf("" to "Все типы") + types.map { it to it }) { type = it }
                     Text("Показано " + filtered.size + " из " + ui.fields.size + ". Нажмите сигнал для графика.",
                         style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (debug) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { query = ""; type = ""; collapsed = emptyList() }) { Text("Сбросить") }
                         TextButton(onClick = { collapsed = if (collapsed.isEmpty()) groups.keys.toList() else emptyList() }) {
                             Text(if (collapsed.isEmpty()) "Свернуть группы" else "Развернуть группы")
@@ -97,13 +96,13 @@ fun ExpertScreen(
             }
             if (filtered.isEmpty()) item(key = "empty") { Text("Нет сигналов по выбранным условиям.", color = colors.muted) }
             for ((group, fields) in groups) {
-                item(key = "group:$group") {
+                if (debug) item(key = "group:$group") {
                     TextButton(onClick = { collapsed = if (group in collapsed) collapsed - group else collapsed + group }) {
                         Text((if (group in collapsed) "▸ " else "▾ ") + group + " (" + fields.size + ")")
                     }
                 }
-                if (group !in collapsed) items(fields, key = { "field:" + it.topic }) { field ->
-                    SignalCard(field, reading = { ui.readings[field.topic] }, onClick = { onChart(field) })
+                if (!debug || group !in collapsed) items(fields, key = { "field:" + it.topic }) { field ->
+                    SignalCard(field, debug, ui.fields.count { it.shortName == field.shortName } > 1, reading = { ui.readings[field.topic] }, onClick = { onChart(field) })
                 }
             }
         }
@@ -122,7 +121,7 @@ private fun CatalogChoice(label: String, choices: List<Pair<String, String>>, on
 }
 
 @Composable
-private fun SignalCard(field: Field, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
+private fun SignalCard(field: Field, debug: Boolean, duplicateName: Boolean, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
     val colors = LocalStatusColors.current
     val check = Session.check(field)
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
@@ -135,12 +134,12 @@ private fun SignalCard(field: Field, reading: () -> FieldSampler.Reading?, onCli
                 error != null -> error
                 value != null -> field.format(value) + if (sample.outOfRange) " (вне границ)" else ""
                 else -> "—"
-            }, style = MaterialTheme.typography.titleLarge, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            }, style = MaterialTheme.typography.titleLarge, minLines = 1, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 color = if (error != null || sample?.outOfRange == true) colors.bad else MaterialTheme.colorScheme.onSurface)
-            Text(field.topic, style = MonoText, color = colors.muted)
-            Text(field.address.hex32() + " · " + field.typeLabel + (field.sizeBits?.let { " · $it бит" } ?: ""), style = MonoText)
-            field.expr?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            field.sourceFile?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.muted) }
+            if (debug || duplicateName) Text(field.topic, style = MonoText, color = colors.muted)
+            if (debug) Text(field.address.hex32() + " · " + field.typeLabel + (field.sizeBits?.let { " · $it бит" } ?: ""), style = MonoText)
+            if (debug) field.expr?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (debug) field.sourceFile?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.muted) }
             if (field.min != null || field.max != null) Text("Границы: ${field.min ?: "…"} … ${field.max ?: "…"}", style = MonoText)
             check.warning?.let { Text(it, color = colors.warn, style = MaterialTheme.typography.bodySmall) }
         }

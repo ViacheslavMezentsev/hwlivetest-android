@@ -97,6 +97,7 @@ fun HwScreen(
     val host = LocalContext.current as? WorkspaceHost
     val page = host?.workspacePage
     val route by Session.route.collectAsState()
+    val fast by Session.fastActions.collectAsState()
     val threshold = with(LocalDensity.current) { 72.dp.toPx() }
     val swipe = if (page != null && navigationEnabled) Modifier.pointerInput(page, navigationEnabled) {
         var distance = 0f
@@ -158,7 +159,7 @@ fun HwScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(route.label, style = MaterialTheme.typography.labelSmall, maxLines = 2,
+            Text(route.label + if (fast) " · Быстрые действия включены" else "", style = MaterialTheme.typography.labelSmall, maxLines = 2,
                 overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
             content()
         }

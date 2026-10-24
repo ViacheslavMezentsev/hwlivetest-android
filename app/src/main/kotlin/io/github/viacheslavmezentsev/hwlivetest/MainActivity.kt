@@ -68,12 +68,6 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
             HwTheme {
                 ExpertScreen(ui,
                     onBack = { if (!ui.busy) WorkspaceNavigation.home(this) },
-                    onScan = {
-                        Session.userSaid("найти ST-Link")
-                        connector.scan()
-                        sync()
-                        Session.programSaid(ui.status)
-                    },
                     onConnect = ::connect,
                     onRead = ::readWord,
                     onOpen = { pickFields.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
@@ -81,7 +75,6 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
                         Session.userSaid("открыть график: "+f.topic)
                         startActivity(Intent(this, ChartActivity::class.java).putExtra(ChartActivity.EXTRA_TOPIC, f.topic))
                     },
-                    onNavigate = { screen -> startActivity(Intent(this, screen)) },
                 )
             }
         }

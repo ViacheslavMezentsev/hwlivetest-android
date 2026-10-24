@@ -32,18 +32,8 @@ fun SimpleScreen(ui: SimpleUi, onStart: () -> Unit, onExpert: () -> Unit, onFlas
             else -> MaterialTheme.colorScheme.onSurface
         })
         val report = ui.report
-        val buttonColor = if (ui.running || report == null) MaterialTheme.colorScheme.primary else levelColor(report.level)
-        Button(onClick = onStart, shape = CircleShape, modifier = Modifier.size(220.dp).align(androidx.compose.ui.Alignment.CenterHorizontally),
-            colors = ButtonDefaults.buttonColors(containerColor = buttonColor, contentColor = Color.White)) {
-            Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (ui.running) "СТОП" else if (report == null) "ПУСК" else "ЕЩЁ РАЗ", style = MaterialTheme.typography.headlineLarge)
-                Text(if (ui.running) "${(ui.progress * 100).toInt()} %" else when (report?.level) {
-                    Level.BAD -> "есть проблемы"
-                    Level.WARN -> "есть замечания"
-                    null -> "проверить плату"
-                    else -> "всё в порядке"
-                })
-            }
+        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+            Text(if (ui.running) "Остановить проверку" else if (report == null) "Проверить плату" else "Повторить проверку")
         }
         if (ui.running) LinearProgressIndicator(progress = { ui.progress }, modifier = Modifier.fillMaxWidth())
         if (ui.step.isNotBlank()) Text(ui.step)
@@ -61,17 +51,17 @@ fun SimpleScreen(ui: SimpleUi, onStart: () -> Unit, onExpert: () -> Unit, onFlas
 
 @Composable
 private fun DiagnosticCard(section: Section) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
+    val debug by Session.debugDetails.collectAsState()
+    var expanded by rememberSaveable(section.level) { mutableStateOf(section.level == Level.BAD || section.level == Level.WARN) }
     Card(Modifier.fillMaxWidth().clickable { expanded = !expanded }) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("${section.level.mark} ${section.title}", style = MaterialTheme.typography.titleMedium, color = levelColor(section.level))
-            Text(section.headline)
-            Text(if (expanded) "Скрыть подробности ▴" else "Подробности ▾", style = MaterialTheme.typography.labelMedium)
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("${section.level.mark} ${section.title}", style = MaterialTheme.typography.bodyMedium, color = levelColor(section.level))
+            if (expanded) Text(section.headline, style = MaterialTheme.typography.bodySmall)
             if (expanded) SelectionContainer {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     section.findings.forEach { finding ->
                         Text("${finding.level.mark} ${finding.title}", color = levelColor(finding.level))
-                        if (finding.detail.isNotBlank()) Text(finding.detail, style = MonoText)
+                        if (debug && finding.detail.isNotBlank()) Text(finding.detail, style = MonoText)
                     }
                 }
             }

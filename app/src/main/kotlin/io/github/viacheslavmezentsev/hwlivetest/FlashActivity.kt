@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -114,6 +115,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         Session.addListener(sessionChanged)
         sync()
         if (!ui.busy) {
+            ui.backup = Prefs.flashBackup(this)
             rebuildPlan()
             if (Session.route.value.ready) readVoltage()
         }
@@ -700,15 +702,17 @@ class FlashActions(
 
 @Composable
 fun FlashScreen(ui: FlashUi, actions: FlashActions) {
+    val debug by Session.debugDetails.collectAsState()
     val status = LocalStatusColors.current
     HwScreen(title = "Прошивка", onBack = actions.back, navigationEnabled = !ui.busy) {
         if (ui.status.isNotEmpty()) {
             Text(ui.status, color = if (ui.error) status.bad else MaterialTheme.colorScheme.onBackground)
         }
         if (!ui.connected) {
-            Button(onClick = actions.connect, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Подключить и опознать") }
+            Button(onClick = actions.connect, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Подключить") }
         } else {
-            InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
+            if (debug) InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
+            else Text(Session.route.value.mcu, style = MaterialTheme.typography.titleMedium)
         }
 
         SectionCard("Резервная копия и сверка · только чтение") {

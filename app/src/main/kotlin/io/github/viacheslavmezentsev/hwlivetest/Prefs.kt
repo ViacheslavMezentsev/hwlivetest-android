@@ -4,6 +4,9 @@ import android.content.Context
 
 /** Настройки, которые переживают перезапуск приложения. */
 object Prefs {
+    fun debugDetails(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("debug_details", false)
+    fun setDebugDetails(c: Context, v: Boolean) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("debug_details", v).apply()
+
     private const val FILE = "hwlivetest"
     private const val EXPERT = "expert_mode"
     private const val LOG_POLLING = "log_polling"

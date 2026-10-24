@@ -53,6 +53,8 @@
             android:parentActivityName=".SimpleActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity android:name=".SettingsActivity" android:exported="false" android:label="Настройки" />
+
         <activity android:name=".JournalActivity" android:exported="false" android:label="Журнал" />
 
         <activity

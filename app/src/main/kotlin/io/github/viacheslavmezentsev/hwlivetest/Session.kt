@@ -42,6 +42,14 @@ object Session {
 
     private val main = Handler(Looper.getMainLooper())
 
+    val debugDetails = MutableStateFlow(false)
+    private val fastActionsState = MutableStateFlow(false)
+    val fastActions = fastActionsState.asStateFlow()
+    fun setFastActions(enabled: Boolean) {
+        fastActionsState.value = enabled && writeMode && route.value.ready
+        notifyChanged()
+    }
+
     private val routeState = MutableStateFlow(ConnectionState())
     val route = routeState.asStateFlow()
     @Volatile var core: CoreState? = null
@@ -234,6 +242,7 @@ object Session {
     }
 
     fun disableWriteMode() {
+        fastActionsState.value = false
         writePermit?.revoke()
         if (writePermit != null) userSaid("выключил режим «Изменение цели»")
         writePermit = null
@@ -249,6 +258,7 @@ object Session {
     }
 
     fun closeConnection() {
+        fastActionsState.value = false
         stopPolling()
         sampler?.clear()
         stlink?.disconnect()

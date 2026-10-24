@@ -13,6 +13,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -141,6 +142,11 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
     }
 
     private fun confirmChange(name: String, op: (TargetWrite) -> CoreState?) {
+        if (!ActionConfirmations.required(name, Session.fastActions.value, Session.writeMode)) {
+            Session.userSaid("быстрое действие: $name")
+            change(name, op)
+            return
+        }
         val mcu = Session.target?.let { t -> listOfNotNull(t.shortName, t.flashSizeKb?.let { "Flash $it КБ" }).joinToString(", ") } ?: "не опознан"
         ui.confirm = Confirm(
             title = "$name?",
@@ -211,16 +217,18 @@ fun TargetScreen(
     onAction: (String, (TargetWrite) -> CoreState?) -> Unit,
     onLeave: (Boolean) -> Unit,
 ) {
+    val debug by Session.debugDetails.collectAsState()
     val status = LocalStatusColors.current
     HwScreen(title = "Цель", onBack = onBack, navigationEnabled = !ui.busy) {
         if (ui.status.isNotEmpty()) {
             Text(ui.status, color = if (ui.error) status.bad else MaterialTheme.colorScheme.onBackground)
         }
         if (!ui.connected) {
-            Button(onClick = onConnect, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Подключить и опознать") }
+            Button(onClick = onConnect, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Подключить") }
         } else {
-            InfoCard("Адаптер", ui.adapter.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
-            InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
+            if (debug) InfoCard("Адаптер", ui.adapter.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
+            if (debug) InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
+            else Text(Session.route.value.mcu, style = MaterialTheme.typography.titleMedium)
         }
 
         val core = ui.core
@@ -232,7 +240,7 @@ fun TargetScreen(
         }
         SectionCard("Ядро") {
             Text(core?.title ?: "не прочитано", color = coreColor, style = MaterialTheme.typography.titleMedium)
-            if (core != null) Text("DHCSR ${core.dhcsr.hex32()}", style = MonoText, color = status.muted)
+            if (debug && core != null) Text("DHCSR ${core.dhcsr.hex32()}", style = MonoText, color = status.muted)
             OutlinedButton(onClick = onRefresh, enabled = ui.connected && !ui.busy) { Text("Обновить") }
         }
 
@@ -242,7 +250,7 @@ fun TargetScreen(
                 Text("Режим «Изменение цели»", style = MaterialTheme.typography.bodyLarge)
             }
             Text(
-                "Выключен при каждом запуске приложения. Каждое действие подтверждается. " +
+                "Выключен при каждом запуске приложения. Подтверждения команд ядра настраиваются в «Быстрых действиях». " +
                     "Option bytes и защита Flash не меняются.",
                 style = MaterialTheme.typography.bodySmall,
                 color = status.muted,

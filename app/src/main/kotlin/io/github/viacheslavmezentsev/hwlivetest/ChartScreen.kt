@@ -130,6 +130,7 @@ private fun ChartControls(ui: ChartUi, own: Boolean, recording: Boolean,
 @Composable
 private fun ChartStatistics(ui: ChartUi, fields: List<Field>, selected: Int) {
     val now = ui.now
+    val debug by Session.debugDetails.collectAsState()
     val recording = ui.recording.isNotEmpty()
         var rate = 0.0
         ui.lines.forEachIndexed { index, l ->
@@ -141,10 +142,11 @@ private fun ChartStatistics(ui: ChartUi, fields: List<Field>, selected: Int) {
                 modifier = Modifier.fillMaxWidth().clickable { ui.selectedTopic = ui.topics[index] }.padding(vertical = 6.dp),
                 style = MaterialTheme.typography.bodyMedium, color = Color(l.color))
         }
-        Text("%.1f Гц, проход опроса %d мс".format(rate, ui.pollMs), style = MaterialTheme.typography.bodySmall)
+        if (debug) Text("%.1f Гц, проход опроса %d мс".format(rate, ui.pollMs), style = MaterialTheme.typography.bodySmall)
         if (recording) Text("● Запись: "+ui.recording, color = MaterialTheme.colorScheme.error)
         if (ui.message.isNotEmpty()) Text(ui.message)
-        fields.forEach { f -> Text(f.topic+"\n"+f.address.hex32()+" "+f.typeLabel+
+        if (!debug) fields.filter { f -> fields.count { it.shortName == f.shortName } > 1 }.forEach { Text(it.topic, style = MaterialTheme.typography.bodySmall) }
+        if (debug) fields.forEach { f -> Text(f.topic+"\n"+f.address.hex32()+" "+f.typeLabel+
             (Session.check(f).warning?.let { " ⚠ "+it } ?: "")+(f.expr?.let { "\n"+it } ?: ""), style = MonoText) }
 }
 
