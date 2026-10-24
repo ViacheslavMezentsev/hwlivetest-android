@@ -61,7 +61,8 @@ private fun DiagnosticCard(section: Section) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     section.findings.forEach { finding ->
                         Text("${finding.level.mark} ${finding.title}", color = levelColor(finding.level))
-                        if (debug && finding.detail.isNotBlank()) Text(finding.detail, style = MonoText)
+                        if ((debug || finding.level == Level.BAD || finding.level == Level.WARN) && finding.detail.isNotBlank())
+                            Text(finding.detail, style = if (debug) MonoText else MaterialTheme.typography.bodySmall)
                     }
                 }
             }

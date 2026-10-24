@@ -65,16 +65,17 @@ class JournalActivity : ComponentActivity(), WorkspaceHost {
 private fun JournalScreen(entries: List<SessionLog.Entry>, polling: Boolean, onBack: () -> Unit,
     onCopy: () -> Unit, onClear: () -> Unit, onPolling: (Boolean) -> Unit,
 ) {
+    val debug by Session.debugDetails.collectAsState()
     var protocol by rememberSaveable { mutableStateOf(false) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
-    val rows = remember(entries, protocol) { entries.flatMap { entry ->
+    val rows = remember(entries, protocol, debug) { entries.flatMap { entry ->
         entry.text.lines().mapIndexed { i, text -> (entry.id.toString()+":"+i) to text }
-    }.filter { protocol || !SessionLog.isProtocol(it.second) }.takeLast(300).asReversed() }
+    }.filter { (debug && protocol) || !SessionLog.isProtocol(it.second) }.takeLast(300).asReversed() }
     HwScreen("Журнал", onBack, scrolling = false, actions = {
         AppMenu(actions = listOf(MenuAction("Копировать весь журнал", run = onCopy),
             MenuAction("Очистить журнал") { confirmClear = true }))
     }) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (debug) Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = protocol, onCheckedChange = { protocol = it }); Text("Показать обмен USB")
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
