@@ -64,6 +64,7 @@ fun rememberClock(): Long {
 fun HwScreen(
     title: String,
     onBack: (() -> Unit)? = null,
+    scrolling: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val now = rememberClock()
@@ -104,7 +105,7 @@ fun HwScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .then(if (scrolling) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content,

@@ -2,7 +2,7 @@ name: Docs
 
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main, "claude/**", "codex/**"]
     paths:
       - "**.md"
       - ".markdownlint-cli2.jsonc"

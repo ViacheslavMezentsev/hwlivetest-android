@@ -18,4 +18,5 @@ kotlin {
 dependencies {
     implementation(project(":stlink"))
     testImplementation(libs.junit)
+    testImplementation(project(":telemetry"))
 }

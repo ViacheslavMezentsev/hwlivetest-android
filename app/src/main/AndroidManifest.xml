@@ -42,6 +42,7 @@
             android:name=".MainActivity"
             android:exported="false"
             android:label="@string/menu_expert"
+            android:theme="@style/AppTheme.Compose"
             android:parentActivityName=".SimpleActivity"
             android:windowSoftInputMode="adjustResize" />
 

@@ -84,11 +84,44 @@ class ElfTest {
         val json = t.toAddressesJson()
         assertTrue(json.contains("\"schema\": 2"))
         assertTrue(json.contains("\"elf_sha256\": \"${IntelHex.sha256(res("t5.elf"))}\""))
-        assertTrue(json.contains("\"topic\": \"/elf/sensors/cached_data/voltage_batt\""))
+        assertTrue(json.contains("/sensors/cached_data/voltage_batt\""))
+        assertTrue(t.entries.all { it.signal.sourceFile.isNotBlank() })
         assertTrue(json.contains("\"kind\": \"float32\""))
         // образ таблицы совпадает с образом плана прошивки из того же ELF
         val plan = FlashPlan.build(ElfFile.parse(res("t5.elf")).loadSegments(), PlanTarget(0x431, 512, 3.3, "F411"))
         assertEquals(plan.imageSha256, t.imageSha256)
         assertTrue(t.warnings.isEmpty())
+    }
+
+    /** TC-29/30: CU, коллизии static-имён, JSON → декодер знаковых полей. */
+    @Test
+    fun sourceTopicsAndSignedValuesRoundTrip() {
+        val signals = listOf(
+            Signal("state", 0x20000001, 1, SignalKind.SIGNED, "int8_t", "src/keys.c"),
+            Signal("state", 0x20000002, 2, SignalKind.SIGNED, "int16_t", "src/keys.c"),
+            Signal("state", 0x20000004, 4, SignalKind.UNSIGNED, "uint32_t", "src/control.c"),
+        )
+        val table = SignalTable("test.elf", "0".repeat(64), emptyList(), signals, 0, emptyList())
+        val parsed = io.github.viacheslavmezentsev.hwlivetest.telemetry.AddressesFile.parse(table.toAddressesJson())
+        assertTrue(parsed.warnings.isEmpty())
+        assertEquals(3, parsed.fields.size)
+        assertEquals(3, parsed.fields.map { it.topic }.distinct().size)
+        assertTrue(parsed.fields[0].topic.startsWith("/elf/src/keys_c/state_at_"))
+        assertEquals("src/keys.c", parsed.fields[0].sourceFile)
+        assertEquals("int8_t", parsed.fields[0].typeLabel)
+        assertEquals(-128.0, parsed.fields[0].decode(0x7FFF8000), 0.0)
+        assertEquals(127.0, parsed.fields[0].decode(0x80007F00.toInt()), 0.0)
+        assertEquals(-32768.0, parsed.fields[1].decode(0x80007F00.toInt()), 0.0)
+        assertEquals(32767.0, parsed.fields[1].decode(0x7FFF8000), 0.0)
+        assertEquals("std_msgs/Int32", parsed.fields[1].message)
+        assertEquals(4294967295.0, parsed.fields[2].decode(-1), 0.0)
+    }
+
+    @Test
+    fun compilationUnitPathsDoNotExposeBuildDirectory() {
+        assertEquals("src/keys.c", Dwarf.sourcePath("/build/project/src/keys.c", "/build/project"))
+        assertEquals("src/keys.c", Dwarf.sourcePath("../src/keys.c", "/build/project/build"))
+        assertEquals("keys.c", Dwarf.sourcePath("/elsewhere/keys.c", "/build/project"))
+        assertEquals("src/keys.c", Dwarf.sourcePath("src\\keys.c", ""))
     }
 }

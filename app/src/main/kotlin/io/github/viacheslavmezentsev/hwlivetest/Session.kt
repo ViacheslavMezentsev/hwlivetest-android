@@ -140,6 +140,7 @@ object Session {
         fieldsFile = file
         fieldsName = name
         sampler = FieldSampler(file.fields)
+        notifyChanged()
     }
 
     fun field(topic: String): Field? = fieldsFile?.fields?.firstOrNull { it.topic == topic }

@@ -28,7 +28,12 @@ data class Field(
     val mask: Long? = null,
     /** Тип сообщения ROS из ключа `message` (std_msgs/Float32 и т. п.). */
     val message: String? = null,
+    /** Исходный тип и единица компиляции ELF; отсутствуют у старых таблиц. */
+    val sourceType: String? = null,
+    val sourceFile: String? = null,
+    val sizeBits: Int? = null,
 ) {
+    val typeLabel: String get() = sourceType?.takeIf { it.isNotBlank() } ?: kind.key
     /** Короткое имя для списка: последний сегмент topic. */
     val shortName: String get() = topic.trimEnd('/').substringAfterLast('/').ifEmpty { topic }
 
@@ -37,7 +42,12 @@ data class Field(
         val word = applyMask(raw)
         return when (kind) {
             FieldKind.FLOAT32 -> Float.fromBits(word.toInt()).toDouble()
-            FieldKind.INT32 -> word.toInt().toDouble()
+            // ТЗ прошивки 5.9.5: расширение знака после маски и сдвига.
+            FieldKind.INT32 -> when (sizeBits) {
+                8 -> word.toByte().toDouble()
+                16 -> word.toShort().toDouble()
+                else -> word.toInt().toDouble()
+            }
             FieldKind.UINT32, FieldKind.UINT32_SECONDS -> word.toDouble()
         }
     }
@@ -122,6 +132,9 @@ data class AddressesFile(val fields: List<Field>, val warnings: List<String>) {
                     shift = (m["shift"] as? Number)?.toInt(),
                     mask = (m["mask"] as? Number)?.toLong(),
                     message = m["message"] as? String,
+                    sourceType = (m["source_type"] ?: m["description"]) as? String,
+                    sourceFile = m["source_file"] as? String,
+                    sizeBits = (m["size_bits"] as? Number)?.toInt(),
                 )
             }
             return AddressesFile(fields, warnings)

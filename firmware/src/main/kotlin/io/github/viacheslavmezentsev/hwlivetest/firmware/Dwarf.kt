@@ -4,7 +4,7 @@ package io.github.viacheslavmezentsev.hwlivetest.firmware
 enum class SignalKind { FLOAT, SIGNED, UNSIGNED, BOOL, POINTER, ENUM }
 
 /** Переменная или её часть (поле структуры, элемент массива) по отладочной информации ELF. */
-data class Signal(val name: String, val address: Long, val size: Int, val kind: SignalKind, val type: String)
+data class Signal(val name: String, val address: Long, val size: Int, val kind: SignalKind, val type: String, val sourceFile: String = "")
 
 /**
  * Минимальный читатель DWARF 2–5 (32-битный формат): глобальные и статические переменные с
@@ -221,6 +221,7 @@ class Dwarf private constructor(private val elf: ElfFile) {
         val seen = HashSet<String>()
         for (cu in units) {
             addrBaseForExpr = (cu.attrs[DW_AT_addr_base] as? Long) ?: 8L
+            val source = sourcePath(cu.attrs[DW_AT_name] as? String ?: "", cu.attrs[DW_AT_comp_dir] as? String ?: "")
             for (d in cu.children) {
                 if (d.tag != TAG_variable) continue
                 val address = location(d) ?: continue
@@ -229,7 +230,9 @@ class Dwarf private constructor(private val elf: ElfFile) {
                 val name = (d.attrs[DW_AT_name] ?: spec?.attrs?.get(DW_AT_name) ?: origin?.attrs?.get(DW_AT_name)) as? String ?: continue
                 val type = (d.attrs[DW_AT_type] ?: spec?.attrs?.get(DW_AT_type) ?: origin?.attrs?.get(DW_AT_type)) as? Long ?: continue
                 if (!seen.add("$name@$address")) continue
+                val first = out.size
                 flatten(name, address, type.toInt(), 0, maxArray, out, limit)
+                for (i in first until out.size) out[i] = out[i].copy(sourceFile = source)
                 if (out.size >= limit) {
                     warnings += "таблица обрезана до $limit значений"
                     return out
@@ -394,6 +397,7 @@ class Dwarf private constructor(private val elf: ElfFile) {
         private const val DW_AT_name = 0x03
         private const val DW_AT_byte_size = 0x0b
         private const val DW_AT_bit_size = 0x0d
+        private const val DW_AT_comp_dir = 0x1b
         private const val DW_AT_lower_bound = 0x22
         private const val DW_AT_upper_bound = 0x2f
         private const val DW_AT_abstract_origin = 0x31
@@ -411,6 +415,15 @@ class Dwarf private constructor(private val elf: ElfFile) {
         private const val ATE_signed_char = 0x06
 
         fun of(elf: ElfFile): Dwarf = Dwarf(elf)
+
+        /** ТЗ прошивки 5.9.6: путь CU без каталога сборочной машины и переходов наверх. */
+        fun sourcePath(name: String, directory: String): String {
+            var path = name.replace('\\', '/')
+            val dir = directory.replace('\\', '/').trimEnd('/')
+            if (dir.isNotEmpty() && path.startsWith("$dir/")) path = path.removePrefix("$dir/")
+            if (path.startsWith('/') || Regex("^[A-Za-z]:").containsMatchIn(path)) return path.substringAfterLast('/')
+            return path.split('/').filter { it.isNotEmpty() && it != "." && it != ".." }.joinToString("/")
+        }
 
         private fun u32(b: ByteArray, o: Int): Long =
             ((b[o].toLong() and 0xFF) or ((b[o + 1].toLong() and 0xFF) shl 8) or ((b[o + 2].toLong() and 0xFF) shl 16) or ((b[o + 3].toLong() and 0xFF) shl 24))
