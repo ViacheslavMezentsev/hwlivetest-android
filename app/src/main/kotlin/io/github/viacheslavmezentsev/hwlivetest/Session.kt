@@ -8,6 +8,8 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.StLink
 import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkConnection
 import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkErrorKind
 import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkException
+import io.github.viacheslavmezentsev.hwlivetest.stlink.TargetWrite
+import io.github.viacheslavmezentsev.hwlivetest.stlink.WritePermit
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.TargetIdentifier
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.TargetInfo
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.AddressesFile
@@ -157,6 +159,40 @@ object Session {
         } finally {
             notifyChanged()
         }
+    }
+
+    // ---------- Изменение цели (ТЗ ST-Link 2.0, п. 5.11.1; ТЗ прошивки, п. 3.1.1) ----------
+
+    /**
+     * Разрешение на изменение цели. Живёт только в памяти процесса: при каждом запуске
+     * приложения режим «Изменение цели» выключен.
+     */
+    @Volatile
+    var writePermit: WritePermit? = null
+        private set
+
+    val writeMode: Boolean get() = writePermit?.active == true
+
+    fun enableWriteMode() {
+        if (writeMode) return
+        writePermit = WritePermit.grant("режим «Изменение цели» включён пользователем")
+        logLine("# изменение цели: режим включён")
+        notifyChanged()
+    }
+
+    fun disableWriteMode() {
+        writePermit?.revoke()
+        if (writePermit != null) logLine("# изменение цели: режим выключен")
+        writePermit = null
+        notifyChanged()
+    }
+
+    /** Доступ к записи и управлению ядром; вызывать в потоке [worker]. */
+    fun targetWrite(): TargetWrite {
+        val st = stlink ?: throw IllegalStateException("Сначала подключитесь к ST-Link.")
+        val permit = writePermit
+            ?: throw StLinkException(StLinkErrorKind.NOT_PERMITTED, "Включите режим «Изменение цели».")
+        return st.targetWrite(permit)
     }
 
     fun closeConnection() {

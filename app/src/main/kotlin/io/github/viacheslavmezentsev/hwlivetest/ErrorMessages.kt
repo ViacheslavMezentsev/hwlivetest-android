@@ -29,6 +29,7 @@ object ErrorMessages {
             StLinkErrorKind.USB_IO -> "Обмен по USB прервался (${e.message}). Проверьте OTG-кабель и переподключите адаптер."
             StLinkErrorKind.PROTOCOL -> "Неожиданный ответ адаптера: ${e.message}"
             StLinkErrorKind.BAD_ARGUMENT -> e.message ?: "Неверный аргумент"
+            StLinkErrorKind.NOT_PERMITTED -> e.message ?: "Режим «Изменение цели» выключен."
         }
         is Fx2Exception -> e.message ?: e.kind.name
         is Fx2Firmware.BadImage -> "Файл прошивки не подходит: ${e.message}."

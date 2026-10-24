@@ -102,13 +102,18 @@ class MainActivity : ClockActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, MENU_SIMPLE, 0, R.string.menu_simple)
-        menu.add(0, MENU_LOGIC, 1, R.string.menu_logic)
-        menu.add(0, MENU_ABOUT, 2, R.string.menu_about)
+        menu.add(0, MENU_TARGET, 1, R.string.menu_target)
+        menu.add(0, MENU_LOGIC, 2, R.string.menu_logic)
+        menu.add(0, MENU_ABOUT, 3, R.string.menu_about)
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            MENU_TARGET -> {
+                startActivity(Intent(this, TargetActivity::class.java))
+                return true
+            }
             MENU_LOGIC -> {
                 startActivity(Intent(this, LogicActivity::class.java))
                 return true
@@ -277,6 +282,7 @@ class MainActivity : ClockActivity() {
         private const val MENU_SIMPLE = 1
         private const val MENU_LOGIC = 2
         private const val MENU_ABOUT = 3
+        private const val MENU_TARGET = 4
 
         fun logHeader() {
             Session.logLine(
