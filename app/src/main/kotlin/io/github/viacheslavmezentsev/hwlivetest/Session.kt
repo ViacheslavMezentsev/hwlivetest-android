@@ -87,7 +87,7 @@ object Session {
 
     fun removeListener(l: () -> Unit) = listeners.remove(l)
 
-    private fun notifyChanged() = main.post { listeners.forEach { it() } }
+    internal fun notifyChanged() = main.post { listeners.forEach { it() } }
 
     // ---------- Поля ----------
 
@@ -218,6 +218,8 @@ object Session {
         stlink = null
         connection = null
         target = null
+        adapterText = ""
+        targetText = ""
         try {
             transport?.close()
         } catch (_: Exception) {

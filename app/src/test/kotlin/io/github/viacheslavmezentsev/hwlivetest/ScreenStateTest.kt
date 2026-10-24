@@ -8,6 +8,28 @@ import org.junit.Test
 
 /** ТЗ прошивки 5.10.2, 5.2.4: новый владелец экрана использует ту же операцию. */
 class ScreenStateTest {
+    @Test fun chartKeepsSelectionPauseScaleAndPendingFolderAcrossRotation() {
+        val store = ViewModelStore()
+        val factory = ViewModelProvider.NewInstanceFactory()
+        val first = ViewModelProvider(store, factory)[ChartUi::class.java]
+        first.topics = listOf("/a", "/b")
+        first.selectedTopic = "/b"
+        first.windowMs = 300_000L
+        first.ownScale = true
+        first.paused = true
+        first.pausedAt = 42L
+        first.afterFolder = "record"
+        val next = ViewModelProvider(store, factory)[ChartUi::class.java]
+        assertEquals(listOf("/a", "/b"), next.topics)
+        assertEquals("/b", next.selectedTopic)
+        assertEquals(300_000L, next.windowMs)
+        assertEquals(true, next.ownScale)
+        assertTrue(next.paused)
+        assertEquals(42L, next.pausedAt)
+        assertEquals("record", next.afterFolder)
+        store.clear()
+    }
+
     @Test fun diagnosticsRetainsRunningStateAndCancelsWhenOwnerIsCleared() {
         val store = ViewModelStore()
         val factory = ViewModelProvider.NewInstanceFactory()

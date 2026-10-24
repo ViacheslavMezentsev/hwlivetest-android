@@ -1,14 +1,10 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
-import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
-import android.util.AttributeSet
-import android.view.MotionEvent
-import android.view.View
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.AxisTracker
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.ChartScale
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.TimeSeries
@@ -23,7 +19,7 @@ import io.github.viacheslavmezentsev.hwlivetest.telemetry.TimeSeries
  * У оси для каждого ряда — треугольник и число: среднее за окно.
  * Ряды рисуются в порядке списка: последний — поверх остальных.
  */
-class ChartView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
+class ChartRenderer(private val density: Float) {
 
     class Line(val name: String, val series: TimeSeries, val color: Int, val format: (Double) -> String)
 
@@ -63,7 +59,6 @@ class ChartView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
         shared.reset()
     }
 
-    private val density = resources.displayMetrics.density
     private fun dp(v: Float) = v * density
 
     private val muted = Color.rgb(0x57, 0x60, 0x6A)
@@ -89,11 +84,11 @@ class ChartView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val path = Path()
 
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
+    fun draw(canvas: Canvas, width: Float, height: Float) {
+        legendRow = 0f
         canvas.drawColor(Color.WHITE)
         val from = nowMs - windowMs
-        val windows = lines.map { it.series.window(from) }
+        val windows = lines.map { it.series.window(from, nowMs) }
         val axes: List<ChartScale.Axis> = if (ownScale) {
             lines.mapIndexed { i, l -> trackers.getOrPut(l.name + "#" + i) { AxisTracker() }.update(windows[i].min, windows[i].max) }
         } else {
@@ -243,19 +238,11 @@ class ChartView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
         }
     }
 
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (lines.size < 2 || legendRow <= 0f) return super.onTouchEvent(event)
-        val row = ((event.y - legendTop) / legendRow).toInt()
-        val inLegend = event.x <= legendRight && event.y >= legendTop && row in lines.indices
-        if (!inLegend) return super.onTouchEvent(event)
-        if (event.action == MotionEvent.ACTION_UP) {
-            onSelect?.invoke(row)
-            performClick()
-        }
-        return true
+    fun selectAt(x: Float, y: Float) {
+        if (lines.size < 2 || legendRow <= 0f) return
+        val row = ((y - legendTop) / legendRow).toInt()
+        if (x <= legendRight && y >= legendTop && row in lines.indices) onSelect?.invoke(row)
     }
-
-    override fun performClick(): Boolean = super.performClick()
 
     private fun formatBack(ms: Long): String =
         if (ms % 60_000 == 0L) "${ms / 60_000} мин" else "${ms / 1000} с"

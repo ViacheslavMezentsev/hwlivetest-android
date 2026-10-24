@@ -43,8 +43,11 @@ class Connector(private val activity: Activity, private val status: (String, Ton
 
     fun select(d: StLinkDevice) {
         if (Session.device?.sameAs(d.device) == true && Session.stlink != null) return
-        Session.worker.execute { Session.closeConnection() }
         Session.device = d
+        Session.worker.execute {
+            Session.closeConnection()
+            Session.notifyChanged()
+        }
         status("Найден ${d.model.title}.", Tone.NORMAL)
     }
 

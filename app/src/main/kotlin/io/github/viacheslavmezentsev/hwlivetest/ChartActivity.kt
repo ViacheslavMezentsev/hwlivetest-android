@@ -1,300 +1,166 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.graphics.Color
-import android.graphics.Typeface
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.TextPaint
-import android.text.method.LinkMovementMethod
-import android.text.style.ClickableSpan
-import android.text.style.ForegroundColorSpan
-import android.text.style.StyleSpan
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
-import android.widget.Button
-import android.widget.TextView
 import android.widget.Toast
-import io.github.viacheslavmezentsev.hwlivetest.stlink.hex32
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.*
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.Field
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.needsOwnScale
+import io.github.viacheslavmezentsev.hwlivetest.ui.HwTheme
 
-/**
- * График одного или нескольких полей. Выбранные поля опрашиваются 10 раз в секунду
- * (соседние адреса — одним блоком), экран перерисовывается каждые [REDRAW_PERIOD_MS].
- * Окно — 30 с, 1 мин или 5 мин; ряды хранят 5 минут, поэтому окно можно переключать без
- * потери данных. Запись в MCAP идёт в папку, выбранную один раз.
- */
-class ChartActivity : ClockActivity() {
+data class SavedRecording(val uri: Uri, val name: String, val messages: Long, val bytes: Long, val error: String?)
 
-    /** Порядок = порядок отметки галочек: последний рисуется поверх остальных. */
-    private val topics = ArrayList<String>()
-    private lateinit var chart: ChartView
-    private lateinit var value: TextView
-    private lateinit var stats: TextView
-    private lateinit var info: TextView
-    private lateinit var titleView: TextView
-    private lateinit var pauseButton: Button
-    private lateinit var scaleButton: Button
-    private lateinit var fieldsButton: Button
-    private lateinit var recordButton: Button
-    private lateinit var windowButtons: List<Pair<Button, Long>>
+class ChartUi : ViewModel() {
+    var topics by mutableStateOf(emptyList<String>())
+    var selectedTopic by mutableStateOf<String?>(null)
+    var windowMs by mutableStateOf(30_000L)
+    var ownScale by mutableStateOf<Boolean?>(null)
+    var paused by mutableStateOf(false)
+    var pausedAt = 0L
+    var now by mutableStateOf(0L)
+    var lines by mutableStateOf(emptyList<ChartRenderer.Line>())
+    var error by mutableStateOf<String?>(null)
+    var message by mutableStateOf("")
+    var recording by mutableStateOf("")
+    var recordBusy by mutableStateOf(false)
+    var pollMs by mutableStateOf(0L)
+    var afterFolder: String? = null
+    var saved by mutableStateOf<SavedRecording?>(null)
+}
 
+/** ТЗ прошивки 5.11: Canvas Compose, существующие оси и MCAP. */
+class ChartActivity : ComponentActivity() {
+    private lateinit var ui: ChartUi
     private val handler = Handler(Looper.getMainLooper())
-    private var windowMs = 30_000L
-    private var paused = false
-
-    /** topic канала, чьё текущее значение показано крупно (выбирается нажатием). */
-    private var selectedTopic: String? = null
-    private var pausedAt = 0L
-
-    /** null — выбирать автоматически по порядку величин полей. */
-    private var ownScale: Boolean? = null
-
-    /** Что сделать после выбора папки записей. */
-    private var afterFolder: (() -> Unit)? = null
-
-    @Volatile
-    private var lastError: String? = null
-
+    private var resumed = false
+    private var generation = 0
+    private val onSessionChanged: () -> Unit = { applyTopics(); if (resumed) startPolling() }
     private val redraw = object : Runnable {
-        override fun run() {
-            refresh()
-            handler.postDelayed(this, REDRAW_PERIOD_MS)
+        override fun run() { refresh(); if (resumed) handler.postDelayed(this, 100L) }
+    }
+    private val folderPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val tree = result.data?.data
+        val action = ui.afterFolder
+        ui.afterFolder = null
+        if (result.resultCode == RESULT_OK && tree != null) {
+            try { Recording.rememberFolder(this, tree); when (action) { "record" -> toggleRecording(); "export" -> exportBuffer() } }
+            catch (e: Exception) { ui.message = "Папка недоступна: "+e.message }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val saved = savedInstanceState?.getStringArrayList(STATE_TOPICS)
-        val initial = saved ?: listOfNotNull(intent.getStringExtra(EXTRA_TOPIC))
-        topics += initial.filter { Session.field(it) != null }
-        if (topics.isEmpty()) {
-            finish()
-            return
+        ui = ViewModelProvider(this)[ChartUi::class.java]
+        if (ui.topics.isEmpty()) {
+            ui.topics = (savedInstanceState?.getStringArrayList("topics")
+                ?: listOfNotNull(intent.getStringExtra(EXTRA_TOPIC))).filter { Session.field(it) != null }
+            ui.selectedTopic = savedInstanceState?.getString("selected")
+            ui.windowMs = savedInstanceState?.getLong("window", 30_000L) ?: 30_000L
+            ui.ownScale = savedInstanceState?.getString("scale")?.toBooleanStrictOrNull()
         }
-        setContentView(R.layout.activity_chart)
-        actionBar?.setDisplayHomeAsUpEnabled(true)
-
-        titleView = findViewById(R.id.chartTitle)
-        info = findViewById(R.id.chartInfo)
-        value = findViewById(R.id.chartValue)
-        stats = findViewById(R.id.chartStats)
-        chart = findViewById(R.id.chart)
-        selectedTopic = savedInstanceState?.getString(STATE_SELECTED)
-        chart.onSelect = { i -> fields().getOrNull(i)?.let { select(it.topic) } }
-        stats.movementMethod = LinkMovementMethod.getInstance()
-        stats.highlightColor = Color.TRANSPARENT
-
-        windowButtons = listOf(
-            findViewById<Button>(R.id.btnWindow30s) to 30_000L,
-            findViewById<Button>(R.id.btnWindow1m) to 60_000L,
-            findViewById<Button>(R.id.btnWindow5m) to 300_000L,
-        )
-        windowMs = savedInstanceState?.getLong(STATE_WINDOW)?.takeIf { it > 0 } ?: 30_000L
-        ownScale = savedInstanceState?.let { if (it.getBoolean(STATE_OWN_SET, false)) it.getBoolean(STATE_OWN, false) else null }
-        windowButtons.forEach { (b, ms) -> b.setOnClickListener { setWindow(ms) } }
-        pauseButton = findViewById(R.id.btnPause)
-        pauseButton.setOnClickListener { togglePause() }
-        scaleButton = findViewById(R.id.btnScale)
-        scaleButton.setOnClickListener {
-            ownScale = !effectiveOwnScale()
-            updateScaleButton()
-            refresh()
-        }
-        fieldsButton = findViewById(R.id.btnFields)
-        fieldsButton.setOnClickListener { chooseFields() }
-        recordButton = findViewById(R.id.btnRecord)
-        recordButton.setOnClickListener { toggleRecording() }
+        if (ui.topics.isEmpty()) { finish(); return }
         applyTopics()
-        setWindow(windowMs)
-        updateRecordButton()
+        setContent { HwTheme { ChartScreen(ui, fields(), Session.fieldsFile?.fields.orEmpty(),
+            onBack = ::finish,
+            onTopics = { topics -> ui.topics = topics; applyTopics(); startPolling() },
+            onPause = { ui.paused = !ui.paused; ui.pausedAt = Session.nowMs(); refresh() },
+            onRecord = ::toggleRecording,
+            onExport = { withFolder("export", ::exportBuffer) },
+            onShare = { saved -> Recording.share(this, saved.uri, saved.name) },
+            onFolder = { ui.afterFolder = null; folderPicker.launch(Recording.pickFolderIntent()) },
+        ) } }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putStringArrayList("topics", ArrayList(ui.topics))
+        outState.putString("selected", ui.selectedTopic)
+        outState.putLong("window", ui.windowMs)
+        outState.putString("scale", ui.ownScale?.toString())
         super.onSaveInstanceState(outState)
-        outState.putLong(STATE_WINDOW, windowMs)
-        outState.putBoolean(STATE_OWN_SET, ownScale != null)
-        outState.putBoolean(STATE_OWN, ownScale ?: false)
-        outState.putStringArrayList(STATE_TOPICS, topics)
-        outState.putString(STATE_SELECTED, selectedTopic)
     }
 
     override fun onResume() {
         super.onResume()
-        if (topics.isEmpty()) return
+        if (ui.topics.isEmpty()) return
+        resumed = true
+        Session.addListener(onSessionChanged)
         startPolling()
         handler.post(redraw)
     }
 
     override fun onPause() {
+        resumed = false
+        generation++
         handler.removeCallbacks(redraw)
+        Session.removeListener(onSessionChanged)
         Session.stopPolling()
-        // Запись переживает поворот экрана, но не уход с графика.
-        if (isFinishing && Session.recording != null) stopRecording(showResult = false)
+        if (isFinishing) stopRecording(showResult = false)
         super.onPause()
     }
 
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_EXPORT, 0, R.string.menu_export_mcap)
-        menu.add(0, MENU_FOLDER, 1, R.string.menu_record_folder)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                return true
-            }
-            MENU_EXPORT -> {
-                withFolder { exportBuffer() }
-                return true
-            }
-            MENU_FOLDER -> {
-                afterFolder = null
-                startActivityForResult(Recording.pickFolderIntent(), REQUEST_FOLDER)
-                return true
-            }
-        }
-        return super.onOptionsItemSelected(item)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_FOLDER) return
-        val tree = data?.data
-        if (resultCode != RESULT_OK || tree == null) {
-            afterFolder = null
-            return
-        }
-        try {
-            Recording.rememberFolder(this, tree)
-            Toast.makeText(this, R.string.record_folder_saved, Toast.LENGTH_SHORT).show()
-            afterFolder?.invoke()
-        } catch (e: Exception) {
-            stats.text = "Папка недоступна: ${e.message}"
-        }
-        afterFolder = null
-    }
-
-    private fun fields(): List<Field> = topics.mapNotNull { Session.field(it) }
-
-    private fun startPolling() {
-        if (Session.stlink == null) {
-            lastError = "нет подключения — вернитесь и подключитесь"
-            return
-        }
-        lastError = null
-        Session.startPolling(
-            SAMPLE_PERIOD_MS,
-            only = topics.toSet(),
-            onReadings = { r -> lastError = r.firstOrNull { it.error != null }?.let { "${it.spec.shortName}: ${it.error}" } },
-            onStopped = { msg -> lastError = "опрос остановлен: $msg" },
-        )
-    }
+    private fun fields(): List<Field> = ui.topics.mapNotNull { Session.field(it) }
 
     private fun applyTopics() {
         val fs = fields()
-        val sampler = Session.sampler
-        chart.lines = fs.mapIndexedNotNull { i, f ->
-            sampler?.series(f.topic)?.let { ChartView.Line(f.shortName, it, ChartView.PALETTE[i % ChartView.PALETTE.size], f::format) }
-        }
-        setTitle(if (fs.size == 1) fs[0].shortName else "${fs.size} поля")
-        titleView.text = fs.joinToString("\n") { it.topic }
-        info.text = fs.joinToString("\n") { f ->
-            "${f.shortName}: ${f.address.hex32()} ${f.kind.key}" + (Session.check(f).warning?.let { "  ⚠ $it" } ?: "") +
-                if (fs.size == 1) (f.expr?.let { "\n$it" } ?: "") else ""
-        }
-        scaleButton.isEnabled = fs.size > 1
-        if (fs.none { it.topic == selectedTopic }) selectedTopic = fs.firstOrNull()?.topic
-        chart.selected = fs.indexOfFirst { it.topic == selectedTopic }.coerceAtLeast(0)
-        updateScaleButton()
-    }
-
-    /** Выбрать канал для крупного значения (нажатие в списке под числом или в легенде графика). */
-    private fun select(topic: String) {
-        if (topic == selectedTopic) return
-        selectedTopic = topic
-        chart.selected = fields().indexOfFirst { it.topic == topic }.coerceAtLeast(0)
+        ui.lines = fs.mapIndexedNotNull { i, f -> Session.sampler?.series(f.topic)?.let {
+            ChartRenderer.Line(f.shortName, it, ChartRenderer.PALETTE[i % ChartRenderer.PALETTE.size], f::format)
+        } }
+        if (ui.selectedTopic !in ui.topics) ui.selectedTopic = ui.topics.firstOrNull()
         refresh()
     }
 
-    /** Галочки в порядке отметки: снятые убираются, новые встают в конец (поверх). */
-    private fun chooseFields() {
-        val all = Session.fieldsFile?.fields ?: return
-        val names = all.map { it.topic }.toTypedArray<CharSequence>()
-        val checked = BooleanArray(all.size) { all[it].topic in topics }
-        val order = ArrayList(topics)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.fields_dialog_title)
-            .setMultiChoiceItems(names, checked) { _, which, isChecked ->
-                checked[which] = isChecked
-                order.remove(all[which].topic)
-                if (isChecked) order.add(all[which].topic)
-            }
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                if (order.isNotEmpty()) {
-                    topics.clear()
-                    topics += order.takeLast(ChartView.PALETTE.size)
-                    applyTopics()
-                    startPolling()
-                    refresh()
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+    private fun startPolling() {
+        val current = ++generation
+        if (Session.stlink == null) { ui.error = "Нет подключения — вернитесь и подключитесь"; return }
+        ui.error = null
+        Session.startPolling(100L, ui.topics.toSet(),
+            onReadings = { readings ->
+                val error = readings.firstOrNull { it.error != null }?.let { it.spec.shortName+": "+it.error }
+                runOnUiThread { if (resumed && generation == current) ui.error = error }
+            },
+            onStopped = { error -> runOnUiThread { if (resumed && generation == current) ui.error = error } },
+        )
     }
 
-    private fun setWindow(ms: Long) {
-        windowMs = ms
-        windowButtons.forEach { (b, w) -> b.alpha = if (w == ms) 1f else 0.55f }
-        refresh()
-    }
-
-    private fun effectiveOwnScale(): Boolean =
-        ownScale ?: (chart.lines.size > 1 && needsOwnScale(chart.lines.mapNotNull { it.series.lastValue() }))
-
-    private fun updateScaleButton() {
-        scaleButton.setText(if (effectiveOwnScale()) R.string.scale_own else R.string.scale_shared)
-    }
-
-    private fun togglePause() {
-        paused = !paused
-        pausedAt = Session.nowMs()
-        pauseButton.setText(if (paused) R.string.btn_resume else R.string.btn_pause)
-        refresh()
+    private fun refresh() {
+        ui.now = if (ui.paused) ui.pausedAt else Session.nowMs()
+        ui.pollMs = Session.lastPollMs
+        ui.recording = Session.recording?.let { it.name+", "+it.messages+" сообщ." } ?: ""
     }
 
     // ---------- MCAP ----------
 
-    private fun withFolder(action: () -> Unit) {
+    private fun withFolder(kind: String, action: () -> Unit) {
         if (Recording.folder(this) != null) {
             action()
         } else {
-            afterFolder = action
+            ui.afterFolder = kind
             Toast.makeText(this, R.string.record_folder_pick, Toast.LENGTH_LONG).show()
-            startActivityForResult(Recording.pickFolderIntent(), REQUEST_FOLDER)
+            folderPicker.launch(Recording.pickFolderIntent())
         }
     }
 
     private fun toggleRecording() {
+        if (ui.recordBusy) return
         if (Session.recording != null) {
             stopRecording(showResult = true)
             return
         }
         if (Session.stlink == null) {
-            stats.text = "Запись невозможна: нет подключения."
+            ui.message = "Запись невозможна: нет подключения."
             return
         }
-        withFolder {
+        withFolder("record") {
             val tree = Recording.folder(this) ?: return@withFolder
+            ui.recordBusy = true
             val fs = fields()
             Session.worker.execute {
                 try {
@@ -303,16 +169,18 @@ class ChartActivity : ClockActivity() {
                     Session.logLine("# запись MCAP: ${rec.name}, полей ${fs.size}")
                 } catch (e: Exception) {
                     Session.logLine("# запись MCAP: ${e.message}")
-                    runOnUiThread { stats.text = "Не удалось начать запись: ${e.message}" }
+                    runOnUiThread { ui.message = "Не удалось начать запись: ${e.message}" }
                 }
-                runOnUiThread { updateRecordButton() }
+                runOnUiThread { ui.recordBusy = false; refresh() }
             }
         }
     }
 
     private fun stopRecording(showResult: Boolean) {
-        val rec = Session.recording ?: return
+        ui.recordBusy = true
         Session.worker.execute {
+            val rec = Session.recording
+            if (rec == null) { runOnUiThread { ui.recordBusy = false }; return@execute }
             Session.recording = null
             val err = try {
                 rec.close()
@@ -325,7 +193,7 @@ class ChartActivity : ClockActivity() {
                     (err?.let { ", ошибка: $it" } ?: ""),
             )
             if (showResult) runOnUiThread { showSaved(rec.uri, rec.name, rec.messages, rec.bytes, err) }
-            runOnUiThread { if (!isFinishing) updateRecordButton() }
+            runOnUiThread { ui.recordBusy = false; if (!isFinishing) refresh() }
         }
     }
 
@@ -343,106 +211,16 @@ class ChartActivity : ClockActivity() {
                 Session.logLine("# экспорт MCAP: ${rec.name}, сообщений ${rec.messages}")
                 runOnUiThread { showSaved(rec.uri, rec.name, rec.messages, rec.bytes, null) }
             } catch (e: Exception) {
-                runOnUiThread { stats.text = "Экспорт не удался: ${e.message}" }
+                runOnUiThread { ui.message = "Экспорт не удался: ${e.message}" }
             }
         }
     }
 
     private fun showSaved(uri: Uri, name: String, messages: Long, bytes: Long, err: String?) {
         if (isFinishing) return
-        AlertDialog.Builder(this)
-            .setTitle(name)
-            .setMessage("Сообщений: $messages, ${bytes / 1024} КБ." + (err?.let { "\nОшибка: $it" } ?: ""))
-            .setPositiveButton(R.string.share) { _, _ -> Recording.share(this, uri, name) }
-            .setNegativeButton(android.R.string.ok, null)
-            .show()
+        ui.saved = SavedRecording(uri, name, messages, bytes, err)
     }
 
-    private fun updateRecordButton() {
-        val on = Session.recording != null
-        recordButton.setText(if (on) R.string.record_stop else R.string.record_start)
-        recordButton.setTextColor(getColor(if (on) R.color.error else android.R.color.black))
-        fieldsButton.isEnabled = !on
-    }
 
-    private fun refresh() {
-        val now = if (paused) pausedAt else Session.nowMs()
-        chart.nowMs = now
-        chart.windowMs = windowMs
-        chart.ownScale = effectiveOwnScale()
-        chart.invalidate()
-
-        val sel = chart.lines.getOrNull(chart.selected)
-        val err = lastError
-        val many = chart.lines.size > 1
-        value.text = when {
-            err != null -> err
-            sel != null -> (if (many) "${sel.name}: " else "") + (sel.series.lastValue()?.let(sel.format) ?: "—")
-            else -> "—"
-        }
-        value.setTextColor(
-            when {
-                err != null -> getColor(R.color.error)
-                many && sel != null -> sel.color
-                else -> getColor(android.R.color.black)
-            },
-        )
-
-        val sb = SpannableStringBuilder()
-        var rate = 0.0
-        chart.lines.forEachIndexed { i, l ->
-            val w = l.series.window(now - windowMs)
-            if (i > 0) sb.append('\n')
-            val start = sb.length
-            val chosen = many && i == chart.selected
-            sb.append(if (chosen || !many) "● " else "○ ").append(l.name).append(": ")
-            if (w.size == 0) {
-                sb.append("нет данных")
-            } else {
-                sb.append("мин ${fmt(l, w.min)}  ср ${fmt(l, w.mean)}  макс ${fmt(l, w.max)}")
-                if (w.size > 1) rate = maxOf(rate, (w.size - 1) * 1000.0 / (w.times[w.size - 1] - w.times[0]).coerceAtLeast(1))
-            }
-            sb.setSpan(ForegroundColorSpan(l.color), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            if (many) {
-                if (chosen) sb.setSpan(StyleSpan(Typeface.BOLD), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                val topic = fields().getOrNull(i)?.topic
-                sb.setSpan(
-                    object : ClickableSpan() {
-                        override fun onClick(widget: View) {
-                            topic?.let { select(it) }
-                        }
-
-                        override fun updateDrawState(ds: TextPaint) {
-                            ds.isUnderlineText = false
-                        }
-                    },
-                    start,
-                    sb.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
-        }
-        if (many) sb.append("\nНажмите на канал, чтобы показать его значение крупно")
-        sb.append("\n%.1f Гц, проход опроса %d мс".format(rate, Session.lastPollMs))
-        Session.recording?.let { sb.append("\n● запись: ${it.name}, ${it.messages} сообщ.") }
-        stats.text = sb
-    }
-
-    private fun fmt(l: ChartView.Line, v: Double?): String = v?.let(l.format) ?: "—"
-
-    companion object {
-        const val EXTRA_TOPIC = "topic"
-        private const val STATE_WINDOW = "window"
-        private const val STATE_OWN = "own_scale"
-        private const val STATE_OWN_SET = "own_scale_set"
-        private const val STATE_TOPICS = "topics"
-        private const val STATE_SELECTED = "selected"
-
-        /** 10 Гц: этого хватает для просмотра и не грузит адаптер без нужды. */
-        private const val SAMPLE_PERIOD_MS = 100L
-        private const val REDRAW_PERIOD_MS = 100L
-        private const val REQUEST_FOLDER = 20
-        private const val MENU_EXPORT = 1
-        private const val MENU_FOLDER = 2
-    }
+    companion object { const val EXTRA_TOPIC = "topic" }
 }

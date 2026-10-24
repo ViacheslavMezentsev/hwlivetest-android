@@ -47,7 +47,6 @@ class SimpleActivity : ComponentActivity() {
         }
         if (Session.log.text().isEmpty()) MainActivity.logHeader()
         if (Session.fieldsFile == null) MainActivity.loadSavedFields(this)
-        connector.fromIntent(intent)?.let { connector.select(it) }
         if (!ui.running) ui.report = Session.lastReport
         setContent { HwTheme { SimpleScreen(ui,
             onStart = ::onStartPressed,
@@ -63,16 +62,6 @@ class SimpleActivity : ComponentActivity() {
         ) } }
         showIdle()
         if (savedInstanceState == null && Prefs.expert(this)) startActivity(Intent(this, MainActivity::class.java))
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        connector.fromIntent(intent)?.let {
-            ui.cancel = true
-            connector.select(it)
-            showIdle()
-        }
     }
 
     override fun onResume() {

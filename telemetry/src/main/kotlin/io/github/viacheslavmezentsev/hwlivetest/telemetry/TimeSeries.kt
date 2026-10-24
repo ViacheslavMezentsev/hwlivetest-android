@@ -33,12 +33,14 @@ class TimeSeries(val capacity: Int) {
     @Synchronized
     fun lastValue(): Double? = if (size == 0) null else v[(start + size - 1) % capacity]
 
-    /** Отсчёты с временем >= [fromMs], по возрастанию времени. */
+    /** Отсчёты в [fromMs]..[toMs], по возрастанию; верхняя граница фиксирует паузу графика. */
     @Synchronized
-    fun window(fromMs: Long): Window {
+    fun window(fromMs: Long, toMs: Long = Long.MAX_VALUE): Window {
         var first = 0
         while (first < size && t[(start + first) % capacity] < fromMs) first++
-        val n = size - first
+        var end = first
+        while (end < size && t[(start + end) % capacity] <= toMs) end++
+        val n = end - first
         val wt = LongArray(n)
         val wv = DoubleArray(n)
         for (k in 0 until n) {

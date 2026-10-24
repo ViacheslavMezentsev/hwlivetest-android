@@ -25,7 +25,7 @@ import io.github.viacheslavmezentsev.hwlivetest.telemetry.FieldSampler
 import io.github.viacheslavmezentsev.hwlivetest.ui.HwTheme
 import java.io.File
 
-class ExpertUi {
+class ExpertUi : androidx.lifecycle.ViewModel() {
     var status by mutableStateOf("")
     var tone by mutableStateOf(Connector.Tone.NORMAL)
     var adapter by mutableStateOf("")
@@ -42,7 +42,7 @@ class ExpertUi {
 
 /** ТЗ прошивки 5.9.7–5.9.8: эксперт на Compose; обмен остаётся в Session.worker. */
 class MainActivity : ComponentActivity() {
-    private val ui = ExpertUi()
+    private val ui by lazy { androidx.lifecycle.ViewModelProvider(this)[ExpertUi::class.java] }
     private lateinit var connector: Connector
     private val handler = Handler(Looper.getMainLooper())
     private var resumed = false
@@ -125,6 +125,12 @@ class MainActivity : ComponentActivity() {
         ui.adapter = Session.adapterText.ifEmpty { Session.device?.title ?: "" }
         ui.target = Session.targetText
         ui.connected = Session.stlink != null
+        if (!ui.busy) {
+            ui.status = if (ui.connected) "Подключено: "+Session.target?.shortName
+                else if (Session.device != null) "Найден ST-Link. Подключите и опознайте MCU."
+                else "Адаптер отключён. Подключите ST-Link через OTG."
+            ui.tone = if (ui.connected) Connector.Tone.OK else Connector.Tone.NORMAL
+        }
         ui.logPolling = Session.logPolling
         val file = Session.fieldsFile
         if (file !== shownFile) {

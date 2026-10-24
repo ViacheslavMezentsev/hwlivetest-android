@@ -30,6 +30,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- USB-событие не заменяет открытый экран (ТЗ прошивки 5.12). -->
+        <activity
+            android:name=".UsbAttachActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:excludeFromRecents="true">
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
@@ -73,6 +81,7 @@
 
         <activity
             android:name=".ChartActivity"
+            android:theme="@style/AppTheme.Compose"
             android:exported="false"
             android:label="@string/chart_title"
             android:parentActivityName=".MainActivity" />
