@@ -62,16 +62,16 @@ data class Field(
     }
 
     companion object {
-        /** До 6 значащих цифр, без экспоненты для обычных величин. */
+        /**
+         * Два знака после запятой (просьба владельца, 24.10.2026): ширина числа не скачет, и его
+         * удобно читать на ходу. Очень малые и очень большие — с экспонентой, тоже два знака.
+         */
         fun formatFloat(v: Double): String = when {
             v.isNaN() -> "NaN"
             v.isInfinite() -> if (v > 0) "+∞" else "−∞"
-            v == 0.0 -> "0"
-            abs(v) >= 1e6 || abs(v) < 1e-3 -> "%.4e".format(Locale.ROOT, v)
-            else -> {
-                val digits = (5 - kotlin.math.floor(kotlin.math.log10(abs(v)))).toInt().coerceIn(0, 6)
-                "%.${digits}f".format(Locale.ROOT, v).let { if ('.' in it) it.trimEnd('0').trimEnd('.') else it }
-            }
+            v == 0.0 -> "0.00"
+            abs(v) >= 1e9 || abs(v) < 5e-3 -> "%.2e".format(Locale.ROOT, v)
+            else -> "%.2f".format(Locale.ROOT, v)
         }
     }
 }
