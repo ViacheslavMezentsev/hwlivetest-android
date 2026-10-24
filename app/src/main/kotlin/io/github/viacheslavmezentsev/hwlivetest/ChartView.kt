@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.AxisTracker
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.ChartScale
@@ -38,6 +39,16 @@ class ChartView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
             field = v
         }
     var nowMs: Long = 0
+
+    /** Выбранный ряд: его значение показано крупно; линия толще и рисуется поверх. */
+    var selected: Int = 0
+
+    /** Нажатие на строку легенды — выбор ряда. */
+    var onSelect: ((Int) -> Unit)? = null
+
+    private var legendTop = 0f
+    private var legendRow = 0f
+    private var legendRight = 0f
     var ownScale: Boolean = false
         set(v) {
             if (v != field) resetAxes()
@@ -151,8 +162,10 @@ class ChartView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
             canvas.drawText(msg, (left + right - axisText.measureText(msg)) / 2, (top + bottom) / 2, axisText)
             return
         }
-        // Линии: по порядку списка, последний — сверху.
-        lines.forEachIndexed { li, line ->
+        // Линии: по порядку списка, выбранная — сверху и толще.
+        val order = lines.indices.filter { it != selected } + listOf(selected).filter { it in lines.indices }
+        order.forEach { li ->
+            val line = lines[li]
             val w = windows[li]
             val a = axes[li]
             path.reset()
@@ -170,6 +183,7 @@ class ChartView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
                 prevT = t
             }
             stroke.color = line.color
+            stroke.strokeWidth = dp(if (li == selected && lines.size > 1) 3f else 2f)
             canvas.drawPath(path, stroke)
             if (w.size > 0 && w.values[w.size - 1].isFinite()) {
                 fill.color = line.color
@@ -210,16 +224,38 @@ class ChartView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
             }
             val boxW = (texts.maxOfOrNull { axisText.measureText(it) } ?: 0f) + dp(22f)
             canvas.drawRect(left + dp(4f), top + dp(2f), left + dp(4f) + boxW, top + dp(6f) + rowH * texts.size, bg)
+            legendTop = top + dp(4f)
+            legendRow = rowH
+            legendRight = left + dp(4f) + boxW
             texts.forEachIndexed { i, t ->
                 val yy = top + dp(4f) + rowH * (i + 0.8f)
                 fill.color = lines[i].color
+                fill.style = if (i == selected) Paint.Style.FILL else Paint.Style.STROKE
+                fill.strokeWidth = dp(1.5f)
                 canvas.drawCircle(left + dp(12f), yy - axisText.textSize / 3, dp(4f), fill)
+                fill.style = Paint.Style.FILL
                 axisText.color = lines[i].color
+                axisText.isFakeBoldText = i == selected
                 canvas.drawText(t, left + dp(20f), yy, axisText)
+                axisText.isFakeBoldText = false
             }
             axisText.color = muted
         }
     }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (lines.size < 2 || legendRow <= 0f) return super.onTouchEvent(event)
+        val row = ((event.y - legendTop) / legendRow).toInt()
+        val inLegend = event.x <= legendRight && event.y >= legendTop && row in lines.indices
+        if (!inLegend) return super.onTouchEvent(event)
+        if (event.action == MotionEvent.ACTION_UP) {
+            onSelect?.invoke(row)
+            performClick()
+        }
+        return true
+    }
+
+    override fun performClick(): Boolean = super.performClick()
 
     private fun formatBack(ms: Long): String =
         if (ms % 60_000 == 0L) "${ms / 60_000} мин" else "${ms / 1000} с"

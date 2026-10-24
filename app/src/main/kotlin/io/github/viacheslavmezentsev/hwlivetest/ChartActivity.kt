@@ -6,11 +6,18 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.graphics.Color
+import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextPaint
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -42,6 +49,9 @@ class ChartActivity : ClockActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var windowMs = 30_000L
     private var paused = false
+
+    /** topic канала, чьё текущее значение показано крупно (выбирается нажатием). */
+    private var selectedTopic: String? = null
     private var pausedAt = 0L
 
     /** null — выбирать автоматически по порядку величин полей. */
@@ -77,6 +87,10 @@ class ChartActivity : ClockActivity() {
         value = findViewById(R.id.chartValue)
         stats = findViewById(R.id.chartStats)
         chart = findViewById(R.id.chart)
+        selectedTopic = savedInstanceState?.getString(STATE_SELECTED)
+        chart.onSelect = { i -> fields().getOrNull(i)?.let { select(it.topic) } }
+        stats.movementMethod = LinkMovementMethod.getInstance()
+        stats.highlightColor = Color.TRANSPARENT
 
         windowButtons = listOf(
             findViewById<Button>(R.id.btnWindow30s) to 30_000L,
@@ -109,6 +123,7 @@ class ChartActivity : ClockActivity() {
         outState.putBoolean(STATE_OWN_SET, ownScale != null)
         outState.putBoolean(STATE_OWN, ownScale ?: false)
         outState.putStringArrayList(STATE_TOPICS, topics)
+        outState.putString(STATE_SELECTED, selectedTopic)
     }
 
     override fun onResume() {
@@ -198,7 +213,17 @@ class ChartActivity : ClockActivity() {
                 if (fs.size == 1) (f.expr?.let { "\n$it" } ?: "") else ""
         }
         scaleButton.isEnabled = fs.size > 1
+        if (fs.none { it.topic == selectedTopic }) selectedTopic = fs.firstOrNull()?.topic
+        chart.selected = fs.indexOfFirst { it.topic == selectedTopic }.coerceAtLeast(0)
         updateScaleButton()
+    }
+
+    /** Выбрать канал для крупного значения (нажатие в списке под числом или в легенде графика). */
+    private fun select(topic: String) {
+        if (topic == selectedTopic) return
+        selectedTopic = topic
+        chart.selected = fields().indexOfFirst { it.topic == topic }.coerceAtLeast(0)
+        refresh()
     }
 
     /** Галочки в порядке отметки: снятые убираются, новые встают в конец (поверх). */
@@ -347,14 +372,21 @@ class ChartActivity : ClockActivity() {
         chart.ownScale = effectiveOwnScale()
         chart.invalidate()
 
-        val first = chart.lines.firstOrNull()
+        val sel = chart.lines.getOrNull(chart.selected)
         val err = lastError
+        val many = chart.lines.size > 1
         value.text = when {
             err != null -> err
-            first != null -> first.series.lastValue()?.let(first.format) ?: "—"
+            sel != null -> (if (many) "${sel.name}: " else "") + (sel.series.lastValue()?.let(sel.format) ?: "—")
             else -> "—"
         }
-        value.setTextColor(getColor(if (err != null) R.color.error else android.R.color.black))
+        value.setTextColor(
+            when {
+                err != null -> getColor(R.color.error)
+                many && sel != null -> sel.color
+                else -> getColor(android.R.color.black)
+            },
+        )
 
         val sb = SpannableStringBuilder()
         var rate = 0.0
@@ -362,7 +394,8 @@ class ChartActivity : ClockActivity() {
             val w = l.series.window(now - windowMs)
             if (i > 0) sb.append('\n')
             val start = sb.length
-            sb.append("● ").append(l.name).append(": ")
+            val chosen = many && i == chart.selected
+            sb.append(if (chosen || !many) "● " else "○ ").append(l.name).append(": ")
             if (w.size == 0) {
                 sb.append("нет данных")
             } else {
@@ -370,7 +403,26 @@ class ChartActivity : ClockActivity() {
                 if (w.size > 1) rate = maxOf(rate, (w.size - 1) * 1000.0 / (w.times[w.size - 1] - w.times[0]).coerceAtLeast(1))
             }
             sb.setSpan(ForegroundColorSpan(l.color), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (many) {
+                if (chosen) sb.setSpan(StyleSpan(Typeface.BOLD), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                val topic = fields().getOrNull(i)?.topic
+                sb.setSpan(
+                    object : ClickableSpan() {
+                        override fun onClick(widget: View) {
+                            topic?.let { select(it) }
+                        }
+
+                        override fun updateDrawState(ds: TextPaint) {
+                            ds.isUnderlineText = false
+                        }
+                    },
+                    start,
+                    sb.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
         }
+        if (many) sb.append("\nНажмите на канал, чтобы показать его значение крупно")
         sb.append("\n%.1f Гц, проход опроса %d мс".format(rate, Session.lastPollMs))
         Session.recording?.let { sb.append("\n● запись: ${it.name}, ${it.messages} сообщ.") }
         stats.text = sb
@@ -384,6 +436,7 @@ class ChartActivity : ClockActivity() {
         private const val STATE_OWN = "own_scale"
         private const val STATE_OWN_SET = "own_scale_set"
         private const val STATE_TOPICS = "topics"
+        private const val STATE_SELECTED = "selected"
 
         /** 10 Гц: этого хватает для просмотра и не грузит адаптер без нужды. */
         private const val SAMPLE_PERIOD_MS = 100L
