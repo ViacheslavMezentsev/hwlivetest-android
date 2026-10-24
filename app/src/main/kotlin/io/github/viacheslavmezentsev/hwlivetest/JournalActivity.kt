@@ -23,7 +23,12 @@ import androidx.compose.ui.unit.dp
 import io.github.viacheslavmezentsev.hwlivetest.ui.*
 
 /** ТЗ прошивки 5.13: общий журнал-диалог; обновления работают только на видимом экране. */
-class JournalActivity : ComponentActivity() {
+class JournalActivity : ComponentActivity(), WorkspaceHost {
+    private var workspace by mutableStateOf(false)
+    override val workspacePage get() = if (workspace) WorkspacePage.JOURNAL else null
+    override fun navigateWorkspace(page: WorkspacePage) { if (workspacePage != null && page != workspacePage) WorkspaceNavigation.open(this, page) }
+    override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); setIntent(intent); workspace = intent.getBooleanExtra(WorkspaceNavigation.EXTRA_WORKSPACE, false) }
+    private fun back() { if (workspacePage == null) finish() else WorkspaceNavigation.home(this) }
     private var entries by mutableStateOf(emptyList<SessionLog.Entry>())
     private var logPolling by mutableStateOf(false)
     private val handler = Handler(Looper.getMainLooper())
@@ -32,8 +37,9 @@ class JournalActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        workspace = intent.getBooleanExtra(WorkspaceNavigation.EXTRA_WORKSPACE, false)
         setContent { HwTheme {
-            JournalScreen(entries, logPolling, ::finish, onCopy = {
+            JournalScreen(entries, logPolling, ::back, onCopy = {
                 (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(ClipData.newPlainText("HW Live Test log", Session.log.text()))
                 Toast.makeText(this, R.string.log_copied, Toast.LENGTH_SHORT).show()

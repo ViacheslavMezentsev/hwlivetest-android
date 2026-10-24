@@ -111,8 +111,8 @@ private fun ChartSummary(ui: ChartUi, selected: Int) {
 private fun ChartControls(ui: ChartUi, own: Boolean, recording: Boolean,
     onPause: () -> Unit, onRecord: () -> Unit, onChoose: () -> Unit,
 ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onPause, modifier = Modifier.weight(1f)) { Text(if (ui.paused) "Продолжить" else "Пауза") }
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onPause, modifier = Modifier.weight(1f).fillMaxHeight()) { Text(if (ui.paused) "Продолжить" else "Пауза") }
             OutlinedButton(onClick = { ui.ownScale = !own }, enabled = ui.lines.size > 1, modifier = Modifier.weight(1f)) {
                 Text(if (own) "Свои шкалы" else "Общая шкала")
             }

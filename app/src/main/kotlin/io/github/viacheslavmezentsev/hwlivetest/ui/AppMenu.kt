@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import io.github.viacheslavmezentsev.hwlivetest.WorkspaceHost
 import io.github.viacheslavmezentsev.hwlivetest.AboutActivity
 import io.github.viacheslavmezentsev.hwlivetest.JournalActivity
 
@@ -18,7 +19,8 @@ fun AppMenu(actions: List<MenuAction> = emptyList(), navigationEnabled: Boolean 
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     val common = listOf("Журнал" to JournalActivity::class.java, "О программе" to AboutActivity::class.java)
-        .filter { (_, screen) -> context.javaClass != screen }
+        .filter { (_, screen) -> context.javaClass != screen &&
+            !(screen == JournalActivity::class.java && (context as? WorkspaceHost)?.workspacePage != null) }
         .map { (title, screen) -> MenuAction(title, navigationEnabled) {
             context.startActivity(Intent(context, screen).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         } }

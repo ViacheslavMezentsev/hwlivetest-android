@@ -47,10 +47,8 @@ fun ExpertScreen(
     val listState = rememberLazyListState()
 
     // ТЗ прошивки 5.9.9: навигация не входит в обновляемый список показаний.
-    HwScreen("Режим эксперта", onBack = onBack, scrolling = false, actions = {
+    HwScreen("Режим эксперта", onBack = onBack, scrolling = false, navigationEnabled = !ui.busy, actions = {
         AppMenu(actions = listOf(
-            MenuAction("Цель", !ui.busy) { onNavigate(TargetActivity::class.java) },
-            MenuAction("Прошивка", !ui.busy) { onNavigate(FlashActivity::class.java) },
             MenuAction("Простой режим", !ui.busy, onBack),
         ), navigationEnabled = !ui.busy)
     }) {

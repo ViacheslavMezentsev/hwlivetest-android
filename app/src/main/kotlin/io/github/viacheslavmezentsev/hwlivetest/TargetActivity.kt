@@ -37,7 +37,8 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.SectionCard
 data class Confirm(val title: String, val text: String, val action: () -> Unit)
 
 /** Состояние экрана «Цель». Меняется только в главном потоке. */
-class TargetUi {
+class TargetUi : androidx.lifecycle.ViewModel() {
+    var nextPage: WorkspacePage? = null
     var status by mutableStateOf("")
     var error by mutableStateOf(false)
     var connected by mutableStateOf(false)
@@ -55,8 +56,18 @@ class TargetUi {
  * Экран «Цель» (docs/roadmap.md, этап 3): подключение, состояние ядра по DHCSR и управление ядром
  * в режиме «Изменение цели» (ТЗ ST-Link 2.0, п. 5.11).
  */
-class TargetActivity : ComponentActivity() {
-    private val ui = TargetUi()
+class TargetActivity : ComponentActivity(), WorkspaceHost {
+    override val workspacePage = WorkspacePage.TARGET
+    override fun navigateWorkspace(page: WorkspacePage) { if (page != workspacePage) leave(page) }
+    private val ui by lazy { androidx.lifecycle.ViewModelProvider(this)[TargetUi::class.java] }
+    private val sessionChanged: () -> Unit = { sync() }
+    override fun onResume() {
+        super.onResume()
+        Session.addListener(sessionChanged)
+        sync()
+        if (!ui.busy) refresh()
+    }
+    override fun onPause() { Session.removeListener(sessionChanged); super.onPause() }
     private lateinit var connector: Connector
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,7 +78,6 @@ class TargetActivity : ComponentActivity() {
         }
         Session.stopPolling()
         sync()
-        if (Session.stlink != null) refresh()
         setContent {
             HwTheme {
                 TargetScreen(
@@ -79,7 +89,7 @@ class TargetActivity : ComponentActivity() {
                     onAction = { name, op -> confirmChange(name, op) },
                     onLeave = { run ->
                         ui.askLeave = false
-                        if (run) change("запуск перед уходом", { it.detach() }) { finish() } else finish()
+                        if (run) change("запуск перед уходом", { it.detach() }) { completeLeave() } else completeLeave()
                     },
                 )
             }
@@ -87,7 +97,8 @@ class TargetActivity : ComponentActivity() {
     }
 
     private fun sync() {
-        ui.connected = Session.stlink != null
+        ui.connected = Session.route.value.ready
+        ui.core = Session.core
         ui.adapter = Session.adapterText
         ui.target = Session.targetText
         ui.writeMode = Session.writeMode
@@ -117,7 +128,7 @@ class TargetActivity : ComponentActivity() {
                 null
             }
             runOnUiThread {
-                if (state != null) ui.core = state
+                if (st === Session.stlink) Session.updateCore(state)
                 sync()
             }
         }
@@ -144,14 +155,16 @@ class TargetActivity : ComponentActivity() {
     private fun change(name: String, op: (TargetWrite) -> CoreState?, after: () -> Unit = {}) {
         ui.busy = true
         Session.worker.execute {
+            var succeeded = false
             try {
                 val tw = Session.targetWrite()
                 Session.logLine("# изменение цели: $name…")
                 val state = op(tw) ?: tw.coreState()
+                succeeded = true
                 Session.logLine("# изменение цели: $name → ${state.title}")
                 Session.programSaid("$name: ядро — ${state.title}")
                 runOnUiThread {
-                    ui.core = state
+                    Session.updateCore(state)
                     ui.status = "$name: ${state.title}."
                     ui.error = false
                 }
@@ -166,15 +179,22 @@ class TargetActivity : ComponentActivity() {
                 runOnUiThread {
                     ui.busy = false
                     sync()
-                    after()
+                    if (succeeded) after()
                 }
             }
         }
     }
 
     /** ТЗ ST-Link 2.0, п. 5.11.8: уходя с остановленным ядром — спросить, запустить ли его. */
-    private fun leave() {
-        if (ui.core?.halted == true && Session.writeMode && Session.stlink != null) ui.askLeave = true else finish()
+    private fun leave(page: WorkspacePage? = null) {
+        if (ui.busy) return
+        ui.nextPage = page
+        if (Session.core?.halted == true && Session.writeMode && Session.stlink != null) ui.askLeave = true else completeLeave()
+    }
+    private fun completeLeave() {
+        val page = ui.nextPage
+        ui.nextPage = null
+        if (page == null) WorkspaceNavigation.home(this) else WorkspaceNavigation.open(this, page)
     }
 }
 
@@ -215,7 +235,7 @@ fun TargetScreen(
 
         SectionCard("Изменение цели") {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Switch(checked = ui.writeMode, onCheckedChange = onWriteMode)
+                Switch(checked = ui.writeMode, enabled = !ui.busy, onCheckedChange = onWriteMode)
                 Text("Режим «Изменение цели»", style = MaterialTheme.typography.bodyLarge)
             }
             Text(

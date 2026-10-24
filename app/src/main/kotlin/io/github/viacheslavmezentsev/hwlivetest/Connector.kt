@@ -29,6 +29,8 @@ class Connector(private val activity: Activity, private val status: (String, Ton
         Session.logLine("# поиск: найдено ${found.size} ST-Link")
         if (found.isEmpty()) {
             Session.device = null
+            Session.disableWriteMode()
+            Session.worker.execute { Session.closeConnection() }
             status(
                 "ST-Link не найден. Подключите адаптер через OTG-переходник. " +
                     "На некоторых телефонах (в том числе Huawei) OTG нужно включить в настройках.",
@@ -42,8 +44,10 @@ class Connector(private val activity: Activity, private val status: (String, Ton
     }
 
     fun select(d: StLinkDevice) {
-        if (Session.device?.sameAs(d.device) == true && Session.stlink != null) return
+        if (Session.device?.sameAs(d.device) == true) return
+        Session.disableWriteMode()
         Session.device = d
+        Session.routeChanged(ConnectionState.Stage.USB_FOUND)
         Session.worker.execute {
             Session.closeConnection()
             Session.notifyChanged()
@@ -51,18 +55,21 @@ class Connector(private val activity: Activity, private val status: (String, Ton
         status("Найден ${d.model.title}.", Tone.NORMAL)
     }
 
-    fun withPermission(d: StLinkDevice, then: () -> Unit) {
+    fun withPermission(d: StLinkDevice, onDenied: () -> Unit = {}, then: () -> Unit) {
         if (usb.hasPermission(d)) {
             then()
             return
         }
+        Session.routeChanged(ConnectionState.Stage.PERMISSION_REQUIRED)
         status("Нужно разрешение на доступ к USB.", Tone.NORMAL)
         usb.requestPermission(d) { granted ->
             Session.logLine("# разрешение USB: ${if (granted) "выдано" else "отклонено"}")
             if (granted) {
                 then()
             } else {
+                Session.routeChanged(ConnectionState.Stage.ERROR, "Нет разрешения USB")
                 status("Нет разрешения на доступ к USB. Повторите и разрешите доступ.", Tone.ERROR)
+                onDenied()
             }
         }
     }
@@ -77,11 +84,11 @@ class Connector(private val activity: Activity, private val status: (String, Ton
             onDone(null)
             return
         }
-        withPermission(d) {
+        withPermission(d, onDenied = { onDone(null) }) {
             status("Подключение к ${d.model.title}…", Tone.NORMAL)
             Session.worker.execute {
                 val info = try {
-                    Session.connectBlocking(usb, d)
+                    Session.ensureConnected(usb, d)
                 } catch (e: Exception) {
                     activity.runOnUiThread { status(ErrorMessages.describe(e), Tone.ERROR) }
                     null

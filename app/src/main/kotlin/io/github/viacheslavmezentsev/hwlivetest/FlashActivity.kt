@@ -61,6 +61,7 @@ import java.util.Locale
 
 /** Состояние экрана «Прошивка». Меняется только в главном потоке. */
 class FlashUi : ViewModel() {
+    var nextPage: WorkspacePage? = null
     var segments: List<Segment>? = null
     var fileBytes = 0
     var fileSha: String? = null
@@ -102,7 +103,21 @@ class FlashUi : ViewModel() {
  * Экран «Прошивка» (docs/roadmap.md, этап 4; ТЗ прошивки): файл HEX, план, сверка, стирание,
  * прошивка с резервной копией и сверкой, история и отчёт.
  */
-class FlashActivity : ComponentActivity() {
+class FlashActivity : ComponentActivity(), WorkspaceHost {
+    override val workspacePage: WorkspacePage? get() = if (ui.readOnly) null else WorkspacePage.FLASH
+    override fun navigateWorkspace(page: WorkspacePage) { if (!ui.readOnly && page != workspacePage) leave(page) }
+    private val sessionChanged: () -> Unit = { sync(); if (!ui.busy) rebuildPlan() }
+    override fun onResume() {
+        super.onResume()
+        Session.addListener(sessionChanged)
+        sync()
+        if (!ui.busy) {
+            rebuildPlan()
+            if (Session.route.value.ready) readVoltage()
+        }
+    }
+    override fun onPause() { Session.removeListener(sessionChanged); super.onPause() }
+
     private val ui by lazy { ViewModelProvider(this)[FlashUi::class.java] }
     private lateinit var connector: Connector
 
@@ -147,7 +162,6 @@ class FlashActivity : ComponentActivity() {
         Session.stopPolling()
         ui.backup = Prefs.flashBackup(this)
         sync()
-        if (Session.stlink != null && !ui.busy) readVoltage()
         setContent {
             HwTheme {
                 FlashScreen(
@@ -173,7 +187,7 @@ class FlashActivity : ComponentActivity() {
                         clearHistory = { FlashHistory.clear(this); sync() },
                         leave = { runCore ->
                             ui.askLeave = false
-                            if (runCore) leaveRunning() else finish()
+                            if (runCore) leaveRunning() else completeLeave()
                         },
                     ),
                 )
@@ -182,7 +196,8 @@ class FlashActivity : ComponentActivity() {
     }
 
     private fun sync() {
-        ui.connected = Session.stlink != null
+        ui.connected = Session.route.value.ready
+        ui.halted = Session.core?.halted == true
         ui.adapter = Session.adapterText
         ui.target = Session.targetText
         ui.writeMode = Session.writeMode
@@ -199,15 +214,24 @@ class FlashActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        ui.readOnly = intent.getBooleanExtra(EXTRA_READ_ONLY, false)
+    }
+
     private fun readVoltage() {
         val st = Session.stlink ?: return
         Session.worker.execute {
-            voltage = try {
+            val measured = try {
                 st.targetVoltage()
             } catch (_: Exception) {
                 null
             }
-            runOnUiThread { rebuildPlan() }
+            val state = runCatching { io.github.viacheslavmezentsev.hwlivetest.stlink.CoreState(st.read32(io.github.viacheslavmezentsev.hwlivetest.stlink.CortexDebugRegs.DHCSR)) }.getOrNull()
+            runOnUiThread {
+                if (st === Session.stlink) { voltage = measured; Session.updateCore(state); rebuildPlan() }
+            }
         }
     }
 
@@ -432,7 +456,7 @@ class FlashActivity : ComponentActivity() {
                 ui.result = details.joinToString("\n")
                 ui.resultOk = outcome.ok
                 ui.report = entry.report(details)
-                ui.halted = state?.halted == true
+                Session.updateCore(state)
                 sync()
             }
         }
@@ -605,26 +629,36 @@ class FlashActivity : ComponentActivity() {
         startActivity(Intent.createChooser(send, "Отправить отчёт"))
     }
 
-    private fun leave() {
+    private fun leave(page: WorkspacePage? = null) {
         if (ui.busy) {
             ui.status = "Дождитесь окончания операции или нажмите «Отмена»."
             return
         }
-        if (!ui.readOnly && ui.halted && Session.writeMode && Session.stlink != null) ui.askLeave = true else finish()
+        ui.nextPage = page
+        if (!ui.readOnly && Session.core?.halted == true && Session.writeMode && Session.stlink != null) ui.askLeave = true else completeLeave()
     }
 
     private fun leaveRunning() {
-        if (ui.readOnly) { finish(); return }
+        if (ui.readOnly) { completeLeave(); return }
         ui.busy = true
         Session.worker.execute {
             try {
-                Session.targetWrite().detach()
+                Session.updateCore(Session.targetWrite().detach())
                 Session.logLine("# изменение цели: запуск перед уходом")
+                runOnUiThread { ui.busy = false; completeLeave() }
             } catch (e: Exception) {
                 Session.logLine("# изменение цели: запуск перед уходом — ошибка: ${e.message}")
+                runOnUiThread { ui.busy = false; ui.error = true; ui.status = ErrorMessages.describe(e) }
             }
-            runOnUiThread { finish() }
         }
+    }
+
+    private fun completeLeave() {
+        val page = ui.nextPage
+        ui.nextPage = null
+        if (ui.readOnly) finish()
+        else if (page == null) WorkspaceNavigation.home(this)
+        else WorkspaceNavigation.open(this, page)
     }
 
     companion object {

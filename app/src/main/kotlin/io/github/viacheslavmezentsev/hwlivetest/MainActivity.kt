@@ -34,7 +34,11 @@ class ExpertUi : androidx.lifecycle.ViewModel() {
 }
 
 /** ТЗ прошивки 5.9.7–5.9.8: эксперт на Compose; обмен остаётся в Session.worker. */
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), WorkspaceHost {
+    override val workspacePage = WorkspacePage.SIGNALS
+    override fun navigateWorkspace(page: WorkspacePage) {
+        if (!ui.busy && page != workspacePage) WorkspaceNavigation.open(this, page)
+    }
     private val ui by lazy { androidx.lifecycle.ViewModelProvider(this)[ExpertUi::class.java] }
     private lateinit var connector: Connector
     private var resumed = false
@@ -63,7 +67,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             HwTheme {
                 ExpertScreen(ui,
-                    onBack = { Prefs.setExpert(this, false); finish() },
+                    onBack = { if (!ui.busy) WorkspaceNavigation.home(this) },
                     onScan = {
                         Session.userSaid("найти ST-Link")
                         connector.scan()
@@ -101,7 +105,7 @@ class MainActivity : ComponentActivity() {
     private fun sync() {
         ui.adapter = Session.adapterText.ifEmpty { Session.device?.title ?: "" }
         ui.target = Session.targetText
-        ui.connected = Session.stlink != null
+        ui.connected = Session.route.value.ready
         if (!ui.busy) {
             ui.status = if (ui.connected) "Подключено: "+Session.target?.shortName
                 else if (Session.device != null) "Найден ST-Link. Подключите и опознайте MCU."

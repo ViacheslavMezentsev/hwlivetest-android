@@ -1,6 +1,22 @@
 package io.github.viacheslavmezentsev.hwlivetest.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import io.github.viacheslavmezentsev.hwlivetest.Session
+import io.github.viacheslavmezentsev.hwlivetest.WorkspaceHost
+import io.github.viacheslavmezentsev.hwlivetest.WorkspacePage
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,6 +88,21 @@ fun HwScreen(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (onBack != null) BackHandler(onBack = onBack)
+    val host = LocalContext.current as? WorkspaceHost
+    val page = host?.workspacePage
+    val route by Session.route.collectAsState()
+    val threshold = with(LocalDensity.current) { 72.dp.toPx() }
+    val swipe = if (page != null && navigationEnabled) Modifier.pointerInput(page, navigationEnabled) {
+        var distance = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { distance = 0f },
+            onDragCancel = { distance = 0f },
+            onHorizontalDrag = { change, dx -> change.consume(); distance += dx },
+            onDragEnd = {
+                if (kotlin.math.abs(distance) >= threshold) host.navigateWorkspace(page.next(if (distance < 0) 1 else -1))
+            },
+        )
+    } else Modifier
     // Светлая тема: шапка цвета бренда; тёмная: тёмно-синяя, в цвет строки состояния (brand_dark).
     val dark = isSystemInDarkTheme()
     val barColor = if (dark) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary
@@ -101,17 +132,31 @@ fun HwScreen(
                 actions = actions,
             )
         },
+        bottomBar = {
+            if (page != null) TabRow(selectedTabIndex = page.ordinal, modifier = Modifier.navigationBarsPadding()) {
+                WorkspacePage.entries.forEach { tab ->
+                    Tab(selected = tab == page, enabled = navigationEnabled,
+                        onClick = { host.navigateWorkspace(tab) },
+                        text = { Text(tab.title, fontSize = 12.sp, maxLines = 1) })
+                }
+            }
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding: PaddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .then(swipe)
                 .then(if (scrolling) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            content = content,
-        )
+        ) {
+            Text(route.label, style = MaterialTheme.typography.labelSmall, maxLines = 2,
+                overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            content()
+        }
+
     }
 }
 
@@ -170,9 +215,9 @@ fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
 /** Ряд кнопок равной ширины. */
 @Composable
 fun ButtonRow(vararg actions: Pair<String, () -> Unit>, enabled: Boolean) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         for ((label, onClick) in actions) {
-            Button(onClick = onClick, enabled = enabled, modifier = Modifier.weight(1f)) { Text(label) }
+            Button(onClick = onClick, enabled = enabled, modifier = Modifier.weight(1f).fillMaxHeight()) { Text(label) }
         }
     }
 }

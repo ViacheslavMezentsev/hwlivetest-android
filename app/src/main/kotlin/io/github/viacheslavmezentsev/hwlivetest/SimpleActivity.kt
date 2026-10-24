@@ -80,11 +80,11 @@ class SimpleActivity : ComponentActivity() {
         // Ошибку завершившейся проверки не затираем надписью «Подключено».
         if (ui.tone == Connector.Tone.ERROR) return
         ui.status = when {
-            Session.stlink != null -> "Подключено: " + Session.target?.shortName
+            Session.route.value.ready -> "Подключено: " + Session.target?.shortName
             Session.device != null -> "Найден ST-Link. Нажмите ПУСК."
             else -> "Подключите ST-Link через OTG и нажмите ПУСК."
         }
-        ui.tone = if (Session.stlink != null) Connector.Tone.OK else Connector.Tone.NORMAL
+        ui.tone = if (Session.route.value.ready) Connector.Tone.OK else Connector.Tone.NORMAL
     }
 
     private fun onStartPressed() {
@@ -100,7 +100,7 @@ class SimpleActivity : ComponentActivity() {
         ui.step = "Подключение и опознание MCU…"
         Session.userSaid("нажал ПУСК")
         Session.stopPolling()
-        if (Session.stlink != null && Session.target != null) runDiagnostics()
+        if (Session.route.value.ready) runDiagnostics()
         else connector.connect { info ->
             if (info == null || ui.cancel) finishRun(null) else runDiagnostics()
         }

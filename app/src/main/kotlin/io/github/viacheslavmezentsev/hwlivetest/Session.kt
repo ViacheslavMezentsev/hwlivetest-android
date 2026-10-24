@@ -1,5 +1,8 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import io.github.viacheslavmezentsev.hwlivetest.stlink.CoreState
 import android.hardware.usb.UsbDevice
 import android.os.Handler
 import android.os.Looper
@@ -38,6 +41,27 @@ object Session {
     }
 
     private val main = Handler(Looper.getMainLooper())
+
+    private val routeState = MutableStateFlow(ConnectionState())
+    val route = routeState.asStateFlow()
+    @Volatile var core: CoreState? = null
+        private set
+    private val reusableConnection = ConnectionReuse<TargetInfo>()
+
+    fun updateCore(value: CoreState?) { core = value; notifyChanged() }
+
+    internal fun routeChanged(stage: ConnectionState.Stage, error: String? = null) {
+        routeState.value = ConnectionState(stage, device?.model?.title ?: "", target?.shortName ?: "", error)
+        notifyChanged()
+    }
+
+    /** Вызывается только в worker: повторный запрос не закрывает действующее соединение. */
+    fun ensureConnected(usb: StLinkUsb, d: StLinkDevice): TargetInfo {
+        check(device?.sameAs(d.device) == true) { "Адаптер изменился или отключён. Повторите подключение." }
+        return reusableConnection.getOrOpen(d.device.deviceName,
+            reusable = route.value.ready && stlink != null && target != null && usb.hasPermission(d),
+        ) { connectBlocking(usb, d) }
+    }
 
     val log = SessionLog()
 
@@ -154,6 +178,7 @@ object Session {
     /** Открыть адаптер, войти в SWD и опознать MCU. Вызывать в потоке [worker]. */
     fun connectBlocking(usb: StLinkUsb, d: StLinkDevice): TargetInfo {
         closeConnection()
+        routeChanged(ConnectionState.Stage.CONNECTING)
         try {
             val t = usb.open(d)
             logLine("# ${d.title}: ${t.endpointsLabel}")
@@ -162,16 +187,20 @@ object Session {
             stlink = st
             val c = st.connect()
             connection = c
+            routeChanged(ConnectionState.Stage.SWD)
             adapterText = Format.adapter(d, c)
             c.warnings.forEach { logLine("# предупреждение: $it") }
             val info = TargetIdentifier(st).identify()
             info.notes.forEach { logLine("# $it") }
+            check(device?.sameAs(d.device) == true) { "Адаптер отключён во время опознания." }
             target = info
             targetText = Format.target(info)
+            routeChanged(ConnectionState.Stage.READY)
             return info
         } catch (e: Exception) {
             logLine("# ошибка: ${e.javaClass.simpleName}: ${e.message}")
             closeConnection()
+            routeChanged(ConnectionState.Stage.ERROR, ErrorMessages.describe(e))
             throw e
         } finally {
             notifyChanged()
@@ -218,6 +247,8 @@ object Session {
         stlink = null
         connection = null
         target = null
+        reusableConnection.clear()
+        core = null
         adapterText = ""
         targetText = ""
         try {
@@ -225,12 +256,15 @@ object Session {
         } catch (_: Exception) {
         }
         transport = null
+        routeChanged(if (device == null) ConnectionState.Stage.DISCONNECTED else ConnectionState.Stage.USB_FOUND)
     }
 
     /** Адаптер выдернули. Вызывается в главном потоке. */
     fun detached(d: UsbDevice?) {
         if (device?.sameAs(d) != true) return
         device = null
+        disableWriteMode()
+        routeChanged(ConnectionState.Stage.DISCONNECTED)
         adapterText = ""
         targetText = ""
         logLine("# адаптер отключён")
@@ -289,6 +323,7 @@ object Session {
             } catch (e: Exception) {
                 logLine("# опрос остановлен: ${e.message}")
                 stopPolling()
+                if (isFatal(e)) { closeConnection(); routeChanged(ConnectionState.Stage.ERROR, ErrorMessages.describe(e)) }
                 onStopped(ErrorMessages.describe(e))
             }
         }, 0, periodMs, TimeUnit.MILLISECONDS)
