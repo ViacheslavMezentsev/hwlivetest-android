@@ -9,7 +9,7 @@ import java.util.Locale
 
 /**
  * Базовый экран: в шапке узкой строкой — текущие дата и время до секунды, чтобы по
- * снимку экрана было видно, когда он сделан.
+ * снимку экрана было видно, когда он сделан, и версия программы — какая сборка установлена.
  */
 abstract class ClockActivity : Activity() {
     private val clockHandler = Handler(Looper.getMainLooper())
@@ -18,7 +18,7 @@ abstract class ClockActivity : Activity() {
     private val tick = object : Runnable {
         override fun run() {
             val now = System.currentTimeMillis()
-            actionBar?.subtitle = format.format(Date(now))
+            actionBar?.subtitle = format.format(Date(now)) + "  ·  v" + BuildConfig.VERSION_NAME
             clockHandler.postDelayed(this, 1000 - now % 1000 + 5)
         }
     }

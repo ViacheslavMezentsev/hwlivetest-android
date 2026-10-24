@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import io.github.viacheslavmezentsev.hwlivetest.BuildConfig
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -75,7 +76,7 @@ fun HwScreen(
                     Column {
                         Text(title, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            ClockFormat.format(Date(now)),
+                            ClockFormat.format(Date(now)) + "  ·  v" + BuildConfig.VERSION_NAME,
                             style = MaterialTheme.typography.bodySmall,
                             color = barContent.copy(alpha = 0.8f),
                         )

@@ -21,6 +21,8 @@ val buildTime: String = buildInstant.toString()
 // любой более новый APK ставится поверх старого без удаления (данные приложения сохраняются).
 val versionMinutes: Int = ((buildInstant.epochSecond - Instant.parse("2026-01-01T00:00:00Z").epochSecond) / 60).toInt()
 val ciRun: Int? = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+// versionName: последнее число увеличивается с каждой сборкой, отданной на установку (AGENTS.md).
+val appVersion = "0.2.1"
 
 android {
     namespace = "io.github.viacheslavmezentsev.hwlivetest"
@@ -31,7 +33,7 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = versionMinutes
-        versionName = "0.2.0"
+        versionName = appVersion
         buildConfigField("String", "GIT_SHA", "\"$gitSha\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
         buildConfigField("String", "BUILD_ORIGIN", "\"${if (ciRun != null) "ci-$ciRun" else "local"}\"")
@@ -76,4 +78,9 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.activity.compose)
     testImplementation(libs.junit)
+}
+
+// Имя APK с версией: hwlivetest-0.2.1-debug.apk — файлы разных сборок не путаются.
+base {
+    archivesName.set("hwlivetest-$appVersion")
 }
