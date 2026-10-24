@@ -23,6 +23,9 @@ enum class StLinkErrorKind {
 
     /** Неверный аргумент (невыровненный адрес и т. п.). */
     BAD_ARGUMENT,
+
+    /** Изменение цели без действующего разрешения (ТЗ ST-Link 2.0, п. 5.11.1). */
+    NOT_PERMITTED,
 }
 
 class StLinkException(

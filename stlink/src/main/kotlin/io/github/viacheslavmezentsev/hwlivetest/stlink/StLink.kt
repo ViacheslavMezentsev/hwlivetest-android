@@ -54,6 +54,35 @@ class StLink(
         }
     }
 
+    /**
+     * Команда записи блока: заголовок, затем данные отдельной bulk-передачей; ответа нет
+     * (ТЗ ST-Link 2.0, п. 3.2.4). Только для [StLinkTargetWrite].
+     */
+    internal fun sendWithData(command: ByteArray, data: ByteArray) {
+        log("> " + Hex.bytes(command, trimmedLength(command)))
+        log("# > ${data.size} байт: " + Hex.bytes(data, minOf(data.size, LOG_MAX_BYTES)) + if (data.size > LOG_MAX_BYTES) " …" else "")
+        try {
+            transport.write(command)
+            transport.write(data)
+        } catch (e: IOException) {
+            throw StLinkException(StLinkErrorKind.USB_IO, "Ошибка USB: ${e.message}", cause = e)
+        }
+    }
+
+    /** Состояние последней записи или чтения блока (п. 3.4.6). */
+    internal fun lastRwStatus(): Int {
+        val extended = version?.hasLastRwStatus2 ?: true
+        return StLinkProtocol.status(exchange(StLinkProtocol.getLastRwStatus(extended), if (extended) 12 else 2))
+    }
+
+    internal val logLine: (String) -> Unit get() = log
+
+    /**
+     * Доступ к изменению цели (ТЗ ST-Link 2.0, п. 5.11.1, 6.2.3): только с разрешением, которое
+     * приложение выдаёт после включения режима «Изменение цели».
+     */
+    fun targetWrite(permit: WritePermit): TargetWrite = StLinkTargetWrite(this, permit, sleep)
+
     fun readVersion(): StLinkVersion {
         var v = StLinkProtocol.parseVersion(exchange(StLinkProtocol.getVersion(), StLinkProtocol.VERSION_LEN))
         if (v.hw == 1) {
