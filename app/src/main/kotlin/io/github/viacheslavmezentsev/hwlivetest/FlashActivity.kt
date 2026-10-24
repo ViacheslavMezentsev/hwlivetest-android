@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.viacheslavmezentsev.hwlivetest.firmware.ElfFile
 import io.github.viacheslavmezentsev.hwlivetest.firmware.FlashErrorKind
 import io.github.viacheslavmezentsev.hwlivetest.firmware.FlashLayout
 import io.github.viacheslavmezentsev.hwlivetest.firmware.FlashOutcome
@@ -40,9 +41,11 @@ import io.github.viacheslavmezentsev.hwlivetest.firmware.HistoryEntry
 import io.github.viacheslavmezentsev.hwlivetest.firmware.IntelHex
 import io.github.viacheslavmezentsev.hwlivetest.firmware.PlanTarget
 import io.github.viacheslavmezentsev.hwlivetest.firmware.Segment
+import io.github.viacheslavmezentsev.hwlivetest.firmware.SignalTable
 import io.github.viacheslavmezentsev.hwlivetest.stlink.CortexDebugRegs
 import io.github.viacheslavmezentsev.hwlivetest.stlink.CoreState
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.McuVendor
+import io.github.viacheslavmezentsev.hwlivetest.telemetry.AddressesFile
 import io.github.viacheslavmezentsev.hwlivetest.ui.ButtonRow
 import io.github.viacheslavmezentsev.hwlivetest.ui.HwScreen
 import io.github.viacheslavmezentsev.hwlivetest.ui.HwTheme
@@ -82,6 +85,7 @@ class FlashUi {
     var askClear by mutableStateOf(false)
     var askLeave by mutableStateOf(false)
     var halted by mutableStateOf(false)
+    var dialog by mutableStateOf<List<String>>(emptyList())
 }
 
 /**
@@ -97,6 +101,9 @@ class FlashActivity : ComponentActivity() {
     private var fileSha: String? = null
     private var voltage: Double? = null
     private var plan: FlashPlan? = null
+
+    /** Таблица сигналов из ELF; подключается к цели, только когда Flash совпала с образом. */
+    private var signals: SignalTable? = null
 
     @Volatile
     private var cancel = false
@@ -149,6 +156,7 @@ class FlashActivity : ComponentActivity() {
         ui.target = Session.targetText
         ui.writeMode = Session.writeMode
         ui.history = FlashHistory.lines(this)
+        ui.dialog = Session.dialogTail(14)
     }
 
     private fun connect() {
@@ -190,8 +198,21 @@ class FlashActivity : ComponentActivity() {
                 val name = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
                     if (c.moveToFirst()) c.getString(0) else null
                 } ?: uri.lastPathSegment ?: "файл"
-                val parsed = IntelHex.parse(String(bytes, Charsets.US_ASCII))
+                Session.userSaid("выбрал файл $name (${bytes.size} байт)")
+                // ТЗ прошивки 5.9 (р.1.4): ELF — образ по LMA и таблица сигналов из DWARF.
+                val table = if (ElfFile.isElf(bytes)) SignalTable.fromElf(bytes, name) else null
+                val parsed = table?.image ?: IntelHex.parse(String(bytes, Charsets.US_ASCII))
+                table?.let { saveTable(it) }
                 runOnUiThread {
+                    signals = table
+                    table?.let { t ->
+                        Session.programSaid(
+                            "ELF разобран: образ ${FlashPlan.kb(t.image.sumOf { it.data.size })}, получена таблица сигналов — ${t.entries.size} значений " +
+                                "(SHA-256 ELF ${t.elfSha256.take(12)}…, образа ${t.imageSha256.take(12)}…). Адреса применимы к цели, " +
+                                "только если её Flash совпадает с образом: проверю при сверке или прошивке.",
+                        )
+                        t.warnings.forEach { w -> Session.programSaid("ELF: $w") }
+                    }
                     segments = parsed
                     fileBytes = bytes.size
                     fileSha = IntelHex.sha256(bytes)
@@ -201,6 +222,7 @@ class FlashActivity : ComponentActivity() {
                     rebuildPlan()
                 }
             } catch (e: Exception) {
+                Session.programSaid("файл не прочитан: ${e.message}")
                 runOnUiThread {
                     ui.busy = false
                     ui.status = "Файл не прочитан: ${e.message}"
@@ -234,6 +256,7 @@ class FlashActivity : ComponentActivity() {
             } else if (p.units.isNotEmpty()) {
                 add("Резервная копия: ${FlashPlan.unitsText(p.units)}, ${FlashPlan.kb(p.units.sumOf { it.size })}")
             }
+            signals?.let { add("Таблица сигналов из ELF: ${it.entries.size} значений — подключится, когда Flash цели совпадёт с образом") }
         }
         ui.planAllowed = p.allowed && Session.stlink != null
         ui.hasUnits = p.units.isNotEmpty()
@@ -262,12 +285,20 @@ class FlashActivity : ComponentActivity() {
 
     private fun confirmFlash() {
         val p = plan ?: return
-        ui.confirm = Confirm("Прошить?", confirmText(p, true)) { start("прошивка") { f, pr -> f.flash(p, ui.backup, ui.run, pr) } }
+        Session.userSaid("нажал «Прошить»")
+        ui.confirm = Confirm("Прошить?", confirmText(p, true)) {
+            Session.userSaid("подтвердил прошивку ${ui.file}")
+            start("прошивка") { f, pr -> f.flash(p, ui.backup, ui.run, pr) }
+        }
     }
 
     private fun confirmEraseUnits() {
         val p = plan ?: return
-        ui.confirm = Confirm("Стереть секторы плана?", confirmText(p, false)) { start("стирание") { f, pr -> f.erase(p.units, pr) } }
+        Session.userSaid("нажал «Стереть секторы плана»")
+        ui.confirm = Confirm("Стереть секторы плана?", confirmText(p, false)) {
+            Session.userSaid("подтвердил стирание: ${FlashPlan.unitsText(p.units)}")
+            start("стирание") { f, pr -> f.erase(p.units, pr) }
+        }
     }
 
     // ТЗ прошивки 3.1.3: два подтверждения, второе — словом СТЕРЕТЬ.
@@ -277,6 +308,7 @@ class FlashActivity : ComponentActivity() {
     ) { ui.massWord = "" }
 
     private fun massErase() {
+        Session.userSaid("подтвердил полное стирание словом СТЕРЕТЬ")
         ui.massWord = null
         start("полное стирание") { f, pr -> f.erase(null, pr) }
     }
@@ -355,7 +387,13 @@ class FlashActivity : ComponentActivity() {
                 outcome.steps.forEach { add("  ${it.text}") }
                 st.stats.lines().forEach { add("  $it") }
             }
+            Session.programSaid(
+                "$action: ${if (outcome.ok) "успешно" else outcome.kind?.title}, ${"%.1f".format(Locale.ROOT, outcome.durationMs / 1000.0)} с. ${outcome.message}" +
+                    (backupFile?.let { " Резервная копия: ${it.name}." } ?: ""),
+            )
+            outcome.steps.forEach { Session.programSaid("  ${it.text}") }
             runOnUiThread {
+                if (outcome.ok && action == "прошивка") matchTable(plan?.imageSha256, "прошивки")
                 ui.busy = false
                 ui.progress = null
                 ui.step = ""
@@ -388,6 +426,7 @@ class FlashActivity : ComponentActivity() {
         cancel = false
         ui.busy = true
         ui.result = null
+        Session.userSaid("нажал «Сверить с MCU»")
         Session.worker.execute {
             st.stats.reset()
             val t0 = System.currentTimeMillis()
@@ -413,13 +452,48 @@ class FlashActivity : ComponentActivity() {
             val bytes = segs.sumOf { it.data.size }
             val sec = (System.currentTimeMillis() - t0) / 1000.0
             val timing = listOf("Чтение: ${FlashPlan.kb(bytes)} за ${"%.1f".format(Locale.ROOT, sec)} с") + st.stats.lines()
+            Session.programSaid("сверка: ${text.lines().first()} ${timing.first()}.")
             runOnUiThread {
+                if (text.startsWith("Совпадает")) matchTable(plan?.imageSha256, "сверки") else if (signals != null) {
+                    Session.programSaid("таблица сигналов не подключена: Flash цели отличается от образа ELF")
+                }
                 ui.busy = false
                 ui.progress = null
                 ui.result = text + "\n" + timing.joinToString("\n")
                 ui.resultOk = text.startsWith("Совпадает")
                 ui.report = null
             }
+        }
+    }
+
+    /** ТЗ прошивки 5.9.3 (р.1.4): таблица подключается, только если Flash цели совпала с образом ELF. */
+    private fun matchTable(imageSha: String?, how: String) {
+        val t = signals ?: return
+        if (imageSha != t.imageSha256) return
+        try {
+            val json = t.toAddressesJson()
+            val file = AddressesFile.parse(json)
+            val name = "${t.elfName} (ELF, ${mcu()})"
+            File(filesDir, MainActivity.SAVED_FIELDS).writeText(json, Charsets.UTF_8)
+            File(filesDir, MainActivity.SAVED_FIELDS_NAME).writeText(name, Charsets.UTF_8)
+            Session.setFields(file, name)
+            Session.programSaid(
+                "по итогам $how Flash цели совпадает с образом ELF (SHA-256 ${t.imageSha256.take(12)}…) — " +
+                    "таблица сигналов подключена: ${file.fields.size} полей. Значения — в режиме эксперта, графики — по нажатию на поле.",
+            )
+            ui.status = "Таблица сигналов из ELF подключена: ${file.fields.size} полей."
+            ui.error = false
+        } catch (e: Exception) {
+            Session.programSaid("таблица сигналов не подключена: ${e.message}")
+        }
+    }
+
+    /** Таблица из ELF хранится по отпечатку образа: `signals/<sha>.json`. */
+    private fun saveTable(t: SignalTable) {
+        try {
+            val dir = File(filesDir, "signals").apply { mkdirs() }
+            File(dir, "${t.imageSha256.take(16)}.json").writeText(t.toAddressesJson(), Charsets.UTF_8)
+        } catch (_: Exception) {
         }
     }
 
@@ -490,7 +564,7 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
         }
 
         SectionCard("Файл") {
-            OutlinedButton(onClick = actions.pickFile, enabled = !ui.busy) { Text(if (ui.file == null) "Выбрать HEX…" else "Другой файл…") }
+            OutlinedButton(onClick = actions.pickFile, enabled = !ui.busy) { Text(if (ui.file == null) "Выбрать HEX или ELF…" else "Другой файл…") }
             OutlinedTextField(
                 value = ui.expectedSha,
                 onValueChange = actions.expectedSha,
@@ -537,6 +611,10 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
         ui.result?.let { r ->
             InfoCard("Результат", r.lines(), mono = true, accent = if (ui.resultOk) status.ok else status.bad)
             if (ui.report != null) OutlinedButton(onClick = actions.share) { Text("Отправить отчёт") }
+        }
+
+        if (ui.dialog.isNotEmpty()) {
+            InfoCard("Журнал: действия и ответы", ui.dialog.map { it.removePrefix("# ") }, mono = true)
         }
 
         SectionCard("История") {

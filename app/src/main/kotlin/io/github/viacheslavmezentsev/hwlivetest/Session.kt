@@ -113,6 +113,22 @@ object Session {
         onLog?.invoke()
     }
 
+    // ---------- Диалог: действия пользователя и ответы программы ----------
+    // Журнал записывает «разговор» с прибором: что сделал пользователь и как ответила программа.
+    // Из этих строк потом вырастет экран-диалог (тема с историей действий).
+
+    fun userSaid(text: String) = logLine("$USER_PREFIX$text")
+
+    fun programSaid(text: String) = logLine("$PROGRAM_PREFIX$text")
+
+    /** Последние [n] строк диалога (без обмена с адаптером). */
+    fun dialogTail(n: Int): List<String> = log.text().lines()
+        .filter { it.startsWith(USER_PREFIX) || it.startsWith(PROGRAM_PREFIX) }
+        .takeLast(n)
+
+    const val USER_PREFIX = "# пользователь: "
+    const val PROGRAM_PREFIX = "# программа: "
+
     /** Строки от [StLink]: обмен во время опроса не пишется, если это не включено. */
     private fun protocolLog(line: String) {
         if (pollingActive && !logPolling && SessionLog.isProtocol(line)) return
@@ -176,13 +192,13 @@ object Session {
     fun enableWriteMode() {
         if (writeMode) return
         writePermit = WritePermit.grant("режим «Изменение цели» включён пользователем")
-        logLine("# изменение цели: режим включён")
+        userSaid("включил режим «Изменение цели»")
         notifyChanged()
     }
 
     fun disableWriteMode() {
         writePermit?.revoke()
-        if (writePermit != null) logLine("# изменение цели: режим выключен")
+        if (writePermit != null) userSaid("выключил режим «Изменение цели»")
         writePermit = null
         notifyChanged()
     }

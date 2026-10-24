@@ -134,7 +134,10 @@ class TargetActivity : ComponentActivity() {
         ui.confirm = Confirm(
             title = "$name?",
             text = "MCU: $mcu.\nАдаптер: ${Session.device?.title ?: "?"}.\nДействие меняет состояние цели.",
-            action = { change(name, op) },
+            action = {
+                Session.userSaid("подтвердил: $name")
+                change(name, op)
+            },
         )
     }
 
@@ -147,6 +150,7 @@ class TargetActivity : ComponentActivity() {
                 Session.logLine("# изменение цели: $name…")
                 val state = op(tw) ?: tw.coreState()
                 Session.logLine("# изменение цели: $name → ${state.title}")
+                Session.programSaid("$name: ядро — ${state.title}")
                 runOnUiThread {
                     ui.core = state
                     ui.status = "$name: ${state.title}."
@@ -154,6 +158,7 @@ class TargetActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 Session.logLine("# изменение цели: $name — ошибка: ${e.message}")
+                Session.programSaid("$name не выполнено: ${ErrorMessages.describe(e)}")
                 runOnUiThread {
                     ui.status = ErrorMessages.describe(e)
                     ui.error = true
