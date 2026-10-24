@@ -23,7 +23,6 @@
 
         <activity
             android:name=".SimpleActivity"
-            android:theme="@style/AppTheme.Compose"
             android:exported="true"
             android:launchMode="singleTop">
             <intent-filter>
@@ -51,37 +50,35 @@
             android:name=".MainActivity"
             android:exported="false"
             android:label="@string/menu_expert"
-            android:theme="@style/AppTheme.Compose"
             android:parentActivityName=".SimpleActivity"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity android:name=".JournalActivity" android:exported="false" android:label="Журнал" />
 
         <activity
             android:name=".AboutActivity"
             android:exported="false"
-            android:label="@string/about_title"
-            android:theme="@style/AppTheme.Compose" />
+            android:label="@string/about_title" />
 
         <activity
             android:name=".TargetActivity"
             android:exported="false"
-            android:label="@string/target_title"
-            android:theme="@style/AppTheme.Compose" />
+            android:label="@string/target_title" />
 
         <activity
             android:name=".FlashActivity"
             android:exported="false"
-            android:label="@string/flash_title"
-            android:theme="@style/AppTheme.Compose" />
+            android:label="@string/flash_title" />
 
         <activity
             android:name=".LogicActivity"
+            android:theme="@style/LegacyLogicTheme"
             android:exported="false"
             android:label="@string/la_title"
             android:parentActivityName=".MainActivity" />
 
         <activity
             android:name=".ChartActivity"
-            android:theme="@style/AppTheme.Compose"
             android:exported="false"
             android:label="@string/chart_title"
             android:parentActivityName=".MainActivity" />

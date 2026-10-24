@@ -1,16 +1,11 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.OpenableColumns
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,27 +31,18 @@ class ExpertUi : androidx.lifecycle.ViewModel() {
     var fieldsInfo by mutableStateOf("")
     var readings by mutableStateOf(emptyMap<String, FieldSampler.Reading>())
     var readResult by mutableStateOf("")
-    var log by mutableStateOf("")
-    var logPolling by mutableStateOf(false)
 }
 
 /** ТЗ прошивки 5.9.7–5.9.8: эксперт на Compose; обмен остаётся в Session.worker. */
 class MainActivity : ComponentActivity() {
     private val ui by lazy { androidx.lifecycle.ViewModelProvider(this)[ExpertUi::class.java] }
     private lateinit var connector: Connector
-    private val handler = Handler(Looper.getMainLooper())
     private var resumed = false
     private var pollGeneration = 0
     private var shownFile: AddressesFile? = null
     private val onSessionChanged: () -> Unit = {
         sync()
         if (resumed && !ui.busy) startFieldPolling()
-    }
-    private val refreshLog = object : Runnable {
-        override fun run() {
-            ui.log = Session.log.text()
-            if (resumed) handler.postDelayed(this, 500)
-        }
     }
     private val pickFields = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) loadFields(uri)
@@ -92,13 +78,6 @@ class MainActivity : ComponentActivity() {
                         startActivity(Intent(this, ChartActivity::class.java).putExtra(ChartActivity.EXTRA_TOPIC, f.topic))
                     },
                     onNavigate = { screen -> startActivity(Intent(this, screen)) },
-                    onCopyLog = ::copyLog,
-                    onClearLog = { Session.log.clear(); logHeader(); ui.log = Session.log.text() },
-                    onLogPolling = { on ->
-                        Session.logPolling = on
-                        ui.logPolling = on
-                        Prefs.setLogPolling(this, on)
-                    },
                 )
             }
         }
@@ -109,7 +88,6 @@ class MainActivity : ComponentActivity() {
         resumed = true
         Session.addListener(onSessionChanged)
         sync()
-        handler.post(refreshLog)
         if (!ui.busy) startFieldPolling()
     }
 
@@ -117,7 +95,6 @@ class MainActivity : ComponentActivity() {
         resumed = false
         stopFieldPolling()
         Session.removeListener(onSessionChanged)
-        handler.removeCallbacks(refreshLog)
         super.onPause()
     }
 
@@ -131,7 +108,6 @@ class MainActivity : ComponentActivity() {
                 else "Адаптер отключён. Подключите ST-Link через OTG."
             ui.tone = if (ui.connected) Connector.Tone.OK else Connector.Tone.NORMAL
         }
-        ui.logPolling = Session.logPolling
         val file = Session.fieldsFile
         if (file !== shownFile) {
             shownFile = file
@@ -217,12 +193,6 @@ class MainActivity : ComponentActivity() {
                 if (resumed && generation == pollGeneration) ui.fieldsInfo = "Опрос остановлен: " + message
             } },
         )
-    }
-
-    private fun copyLog() {
-        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-            .setPrimaryClip(ClipData.newPlainText("HW Live Test log", Session.log.text()))
-        Toast.makeText(this, R.string.log_copied, Toast.LENGTH_SHORT).show()
     }
 
     companion object {

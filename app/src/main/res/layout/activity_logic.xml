@@ -17,12 +17,12 @@
             android:textSize="16sp" />
 
         <TextView
-            style="@style/SectionTitle"
+            style="@style/LogicSectionTitle"
             android:text="@string/la_section_firmware" />
 
         <TextView
             android:id="@+id/laFirmware"
-            style="@style/InfoBlock" />
+            style="@style/LogicInfoBlock" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -47,15 +47,15 @@
         </LinearLayout>
 
         <TextView
-            style="@style/SectionTitle"
+            style="@style/LogicSectionTitle"
             android:text="@string/la_section_device" />
 
         <TextView
             android:id="@+id/laDevice"
-            style="@style/InfoBlock" />
+            style="@style/LogicInfoBlock" />
 
         <TextView
-            style="@style/SectionTitle"
+            style="@style/LogicSectionTitle"
             android:text="@string/la_section_capture" />
 
         <LinearLayout
@@ -86,10 +86,10 @@
 
         <TextView
             android:id="@+id/laResult"
-            style="@style/InfoBlock" />
+            style="@style/LogicInfoBlock" />
 
         <TextView
-            style="@style/SectionTitle"
+            style="@style/LogicSectionTitle"
             android:text="@string/section_log" />
 
         <Button

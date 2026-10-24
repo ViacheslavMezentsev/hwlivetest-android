@@ -5,7 +5,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -656,9 +655,8 @@ class FlashActions(
 
 @Composable
 fun FlashScreen(ui: FlashUi, actions: FlashActions) {
-    BackHandler(onBack = actions.back)
     val status = LocalStatusColors.current
-    HwScreen(title = "Прошивка", onBack = actions.back) {
+    HwScreen(title = "Прошивка", onBack = actions.back, navigationEnabled = !ui.busy) {
         if (ui.status.isNotEmpty()) {
             Text(ui.status, color = if (ui.error) status.bad else MaterialTheme.colorScheme.onBackground)
         }

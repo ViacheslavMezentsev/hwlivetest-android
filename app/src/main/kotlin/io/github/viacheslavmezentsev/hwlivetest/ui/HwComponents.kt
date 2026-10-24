@@ -1,5 +1,6 @@
 package io.github.viacheslavmezentsev.hwlivetest.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -66,9 +67,11 @@ fun HwScreen(
     title: String,
     onBack: (() -> Unit)? = null,
     scrolling: Boolean = true,
-    actions: @Composable RowScope.() -> Unit = {},
+    navigationEnabled: Boolean = true,
+    actions: @Composable RowScope.() -> Unit = { AppMenu(navigationEnabled = navigationEnabled) },
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (onBack != null) BackHandler(onBack = onBack)
     // Светлая тема: шапка цвета бренда; тёмная: тёмно-синяя, в цвет строки состояния (brand_dark).
     val dark = isSystemInDarkTheme()
     val barColor = if (dark) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary

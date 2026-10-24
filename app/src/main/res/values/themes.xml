@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="android:Theme.Material.Light.DarkActionBar">
-        <item name="android:colorPrimary">@color/brand</item>
-        <item name="android:colorPrimaryDark">@color/brand_dark</item>
-        <item name="android:colorAccent">@color/brand</item>
-    </style>
-
-    <!-- Экраны на Compose рисуют шапку сами. -->
-    <style name="AppTheme.Compose" parent="android:Theme.Material.Light.NoActionBar">
+    <!-- Все рабочие экраны рисуют шапку в Compose. -->
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">@color/brand</item>
         <item name="android:colorPrimaryDark">@color/brand_dark</item>
         <item name="android:statusBarColor">@color/brand_dark</item>
+    </style>
+    <!-- Только отложенный логический анализатор: не используется Compose-экранами. -->
+    <style name="LegacyLogicTheme" parent="android:Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">@color/brand</item>
+        <item name="android:colorPrimaryDark">@color/brand_dark</item>
+        <item name="android:colorAccent">@color/brand</item>
     </style>
 </resources>

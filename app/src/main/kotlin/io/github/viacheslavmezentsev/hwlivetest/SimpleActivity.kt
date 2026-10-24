@@ -57,7 +57,6 @@ class SimpleActivity : ComponentActivity() {
             onFlash = {
                 startActivity(Intent(this, FlashActivity::class.java).putExtra(FlashActivity.EXTRA_READ_ONLY, true))
             },
-            onAbout = { startActivity(Intent(this, AboutActivity::class.java)) },
             onCopy = ::copyReport,
         ) } }
         showIdle()

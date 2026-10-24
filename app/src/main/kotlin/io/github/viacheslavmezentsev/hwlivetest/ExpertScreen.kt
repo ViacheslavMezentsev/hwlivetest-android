@@ -1,14 +1,11 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
 import android.app.Activity
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,18 +31,12 @@ fun ExpertScreen(
     onOpen: () -> Unit,
     onChart: (Field) -> Unit,
     onNavigate: (Class<out Activity>) -> Unit,
-    onCopyLog: () -> Unit,
-    onClearLog: () -> Unit,
-    onLogPolling: (Boolean) -> Unit,
 ) {
-    BackHandler(onBack = onBack)
     var address by rememberSaveable { mutableStateOf("E000ED00") }
     var query by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("") }
     var groupingName by rememberSaveable { mutableStateOf(FieldCatalog.Grouping.SOURCE.name) }
     var collapsed by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    var showLog by rememberSaveable { mutableStateOf(false) }
-    var menu by remember { mutableStateOf(false) }
     val grouping = FieldCatalog.Grouping.valueOf(groupingName)
     val types = remember(ui.fields) { ui.fields.map { it.typeLabel }.distinct().sorted() }
     // Новый ELF/JSON может не содержать ранее выбранный тип.
@@ -57,19 +48,11 @@ fun ExpertScreen(
 
     // ТЗ прошивки 5.9.9: навигация не входит в обновляемый список показаний.
     HwScreen("Режим эксперта", onBack = onBack, scrolling = false, actions = {
-                    Box {
-                        IconButton(onClick = { menu = true }, enabled = !ui.busy) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Меню")
-                        }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Журнал") }, onClick = { menu = false; showLog = true })
-                            for ((label, screen) in listOf("Цель" to TargetActivity::class.java,
-                                "Прошивка" to FlashActivity::class.java, "О программе" to AboutActivity::class.java)) {
-                                DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; onNavigate(screen) })
-                            }
-                            DropdownMenuItem(text = { Text("Простой режим") }, onClick = { menu = false; onBack() })
-                        }
-                    }
+        AppMenu(actions = listOf(
+            MenuAction("Цель", !ui.busy) { onNavigate(TargetActivity::class.java) },
+            MenuAction("Прошивка", !ui.busy) { onNavigate(FlashActivity::class.java) },
+            MenuAction("Простой режим", !ui.busy, onBack),
+        ), navigationEnabled = !ui.busy)
     }) {
         LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "connection") {
@@ -127,7 +110,6 @@ fun ExpertScreen(
             }
         }
     }
-    if (showLog) ExpertLogDialog(ui, onCopyLog, onClearLog, onLogPolling) { showLog = false }
 }
 
 @Composable
@@ -165,46 +147,4 @@ private fun SignalCard(field: Field, reading: () -> FieldSampler.Reading?, onCli
             check.warning?.let { Text(it, color = colors.warn, style = MaterialTheme.typography.bodySmall) }
         }
     }
-}
-
-@Composable
-private fun ExpertLogDialog(ui: ExpertUi, onCopy: () -> Unit, onClear: () -> Unit, onPolling: (Boolean) -> Unit, onClose: () -> Unit) {
-    var protocol by rememberSaveable { mutableStateOf(false) }
-    val lines = remember(ui.log, protocol) { ui.log.lines().filter { protocol || !SessionLog.isProtocol(it) }.takeLast(300) }
-    AlertDialog(onDismissRequest = onClose, title = { Text("Журнал: действия и ответы") },
-        text = {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = protocol, onCheckedChange = { protocol = it })
-                    Text("Показать обмен USB")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = ui.logPolling, onCheckedChange = onPolling)
-                    Text("Писать обмен при опросе")
-                }
-                LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(lines.size) { index ->
-                        val line = lines[index]
-                        val user = line.startsWith(Session.USER_PREFIX)
-                        val content = when {
-                            user -> "Вы: " + line.removePrefix(Session.USER_PREFIX)
-                            line.startsWith(Session.PROGRAM_PREFIX) -> "Программа: " + line.removePrefix(Session.PROGRAM_PREFIX)
-                            else -> line
-                        }
-                        Surface(color = if (user) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            shape = MaterialTheme.shapes.small) {
-                            SelectionContainer { Text(content, Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall) }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text("Закрыть") } },
-        dismissButton = {
-            Row {
-                TextButton(onClick = onCopy) { Text("Копировать") }
-                TextButton(onClick = onClear) { Text("Очистить") }
-            }
-        },
-    )
 }

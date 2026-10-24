@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="SectionTitle">
+    <style name="LogicSectionTitle">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">20dp</item>
@@ -9,7 +9,7 @@
         <item name="android:textColor">@color/brand</item>
     </style>
 
-    <style name="InfoBlock">
+    <style name="LogicInfoBlock">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">4dp</item>

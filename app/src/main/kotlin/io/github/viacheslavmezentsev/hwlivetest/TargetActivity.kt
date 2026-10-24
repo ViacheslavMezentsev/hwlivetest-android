@@ -2,7 +2,6 @@ package io.github.viacheslavmezentsev.hwlivetest
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -189,9 +188,8 @@ fun TargetScreen(
     onAction: (String, (TargetWrite) -> CoreState?) -> Unit,
     onLeave: (Boolean) -> Unit,
 ) {
-    BackHandler(onBack = onBack)
     val status = LocalStatusColors.current
-    HwScreen(title = "Цель", onBack = onBack) {
+    HwScreen(title = "Цель", onBack = onBack, navigationEnabled = !ui.busy) {
         if (ui.status.isNotEmpty()) {
             Text(ui.status, color = if (ui.error) status.bad else MaterialTheme.colorScheme.onBackground)
         }

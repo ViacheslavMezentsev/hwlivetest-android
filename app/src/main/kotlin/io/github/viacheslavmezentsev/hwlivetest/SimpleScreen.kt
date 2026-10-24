@@ -5,8 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -19,21 +17,14 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.*
 
 @Composable
 fun SimpleScreen(ui: SimpleUi, onStart: () -> Unit, onExpert: () -> Unit, onFlash: () -> Unit,
-                 onAbout: () -> Unit, onCopy: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
+                 onCopy: () -> Unit) {
     val colors = LocalStatusColors.current
     BackHandler(enabled = ui.running) { onStart() }
     HwScreen("HW Live Test", actions = {
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Меню") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Режим эксперта") }, enabled = !ui.running,
-                    onClick = { menu = false; onExpert() })
-                DropdownMenuItem(text = { Text("Копировать отчёт") }, onClick = { menu = false; onCopy() })
-                DropdownMenuItem(text = { Text("О программе") }, enabled = !ui.running,
-                    onClick = { menu = false; onAbout() })
-            }
-        }
+        AppMenu(actions = listOf(
+            MenuAction("Режим эксперта", !ui.running, onExpert),
+            MenuAction("Копировать отчёт", run = onCopy),
+        ), navigationEnabled = !ui.running)
     }) {
         Text(ui.status, color = when (ui.tone) {
             Connector.Tone.ERROR -> colors.bad

@@ -6,8 +6,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,20 +26,16 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
     onTopics: (List<String>) -> Unit, onPause: () -> Unit, onRecord: () -> Unit,
     onExport: () -> Unit, onFolder: () -> Unit, onShare: (SavedRecording) -> Unit,
 ) {
-    var menu by remember { mutableStateOf(false) }
     var choosing by rememberSaveable { mutableStateOf(false) }
     var chosen by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val selected = ui.topics.indexOf(ui.selectedTopic).coerceAtLeast(0)
     val own = ui.ownScale ?: (ui.lines.size > 1 && needsOwnScale(ui.lines.mapNotNull { it.series.lastValue() }))
     val recording = ui.recording.isNotEmpty()
     HwScreen(if (fields.size == 1) fields[0].shortName else "График: "+fields.size+" каналов", onBack, actions = {
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Меню") }
-            DropdownMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text("Сохранить буфер в MCAP") }, onClick = { menu = false; onExport() })
-                DropdownMenuItem(text = { Text("Папка записей") }, onClick = { menu = false; onFolder() })
-            }
-        }
+        AppMenu(actions = listOf(
+            MenuAction("Сохранить буфер в MCAP", run = onExport),
+            MenuAction("Папка записей", run = onFolder),
+        ), navigationEnabled = !recording && !ui.recordBusy)
     }) {
         // Чтение now обеспечивает обновление значений и Canvas, но не пересоздаёт экран.
         val now = ui.now
