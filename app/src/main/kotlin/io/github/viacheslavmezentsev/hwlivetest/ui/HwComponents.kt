@@ -1,5 +1,6 @@
 package io.github.viacheslavmezentsev.hwlivetest.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -63,6 +64,10 @@ fun HwScreen(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val now = rememberClock()
+    // Светлая тема: шапка цвета бренда; тёмная: тёмно-синяя, в цвет строки состояния (brand_dark).
+    val dark = isSystemInDarkTheme()
+    val barColor = if (dark) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary
+    val barContent = if (dark) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimary
     Scaffold(
         topBar = {
             TopAppBar(
@@ -72,7 +77,7 @@ fun HwScreen(
                         Text(
                             ClockFormat.format(Date(now)),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
+                            color = barContent.copy(alpha = 0.8f),
                         )
                     }
                 },
@@ -84,9 +89,9 @@ fun HwScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = barColor,
+                    titleContentColor = barContent,
+                    navigationIconContentColor = barContent,
                 ),
             )
         },
