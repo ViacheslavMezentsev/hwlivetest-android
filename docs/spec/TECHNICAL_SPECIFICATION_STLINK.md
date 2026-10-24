@@ -803,8 +803,8 @@ NRST адаптера подключён — это подтверждает п�
 | 5.10.4 | AP ⚠ | TC-29 |
 | 5.10.5 | AP ⚠ | TC-30 |
 | 5.11.1 | TW: `WritePermit`, `check`; AP: `enableWriteMode`, `targetWrite` | TC-32 |
-| 5.11.2–5.11.3 | TW: `halt`, `go`, `waitFor`; TA | TC-33 (модель; плата — D) |
-| 5.11.4–5.11.6 | TW: `reset`, `resetHalt`; TA | TC-34 (модель; плата — D) |
+| 5.11.2–5.11.3 | TW: `halt`, `go`, `waitFor`; TA | TC-33 (модель; плата — 24.10.2026, v0.2.1) |
+| 5.11.4–5.11.6 | TW: `reset`, `resetHalt`; TA | TC-34 (модель; плата — 24.10.2026, v0.2.1) |
 | 5.11.7 | TW: `CoreState`; TA: раздел «Ядро» | TC-33 |
 | 5.11.8 | TW: `detach`; TA ⚠ (вопрос только при уходе с экрана «Цель») | TC-36 |
 | 5.11.9 | SL: `sendWithData` (журнал); TA: `change` ⚠ (истории операций нет) | TC-37 |
