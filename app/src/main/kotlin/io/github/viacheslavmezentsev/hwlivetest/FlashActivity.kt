@@ -66,6 +66,7 @@ class FlashUi : ViewModel() {
     var fileBytes = 0
     var fileSha: String? = null
     var voltage: Double? = null
+    var voltageConnection: io.github.viacheslavmezentsev.hwlivetest.stlink.StLink? = null
     var flashPlan: FlashPlan? = null
     var signals: SignalTable? = null
     @Volatile var cancel = false
@@ -196,6 +197,10 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
     }
 
     private fun sync() {
+        if (ui.voltageConnection !== Session.stlink || !Session.route.value.ready) {
+            voltage = null
+            ui.voltageConnection = Session.stlink
+        }
         ui.connected = Session.route.value.ready
         ui.halted = Session.core?.halted == true
         ui.adapter = Session.adapterText
@@ -313,7 +318,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
             }
             signals?.let { add("Таблица сигналов из ELF: ${it.entries.size} значений — подключится, когда Flash цели совпадёт с образом") }
         }
-        ui.planAllowed = p.allowed && Session.stlink != null
+        ui.planAllowed = p.allowed && Session.route.value.ready
         ui.hasUnits = p.units.isNotEmpty()
     }
 

@@ -113,14 +113,14 @@ private fun ChartControls(ui: ChartUi, own: Boolean, recording: Boolean,
 ) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onPause, modifier = Modifier.weight(1f).fillMaxHeight()) { Text(if (ui.paused) "Продолжить" else "Пауза") }
-            OutlinedButton(onClick = { ui.ownScale = !own }, enabled = ui.lines.size > 1, modifier = Modifier.weight(1f)) {
+            OutlinedButton(onClick = { ui.ownScale = !own }, enabled = ui.lines.size > 1, modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Text(if (own) "Свои шкалы" else "Общая шкала")
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { onChoose() }, enabled = !recording && !ui.recordBusy,
-                modifier = Modifier.weight(1f)) { Text("Каналы") }
-            Button(onClick = onRecord, enabled = !ui.recordBusy, modifier = Modifier.weight(1f)) {
+                modifier = Modifier.weight(1f).fillMaxHeight()) { Text("Каналы") }
+            Button(onClick = onRecord, enabled = !ui.recordBusy, modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Text(if (recording) "Остановить запись" else "Запись MCAP")
             }
         }
