@@ -253,7 +253,7 @@ class FlashActivity : ComponentActivity() {
         if (p.bytesLost > 0) appendLine("Потеряется вне образа: ${FlashPlan.kb(p.bytesLost)}")
         if (flash) {
             val units = "${FlashPlan.unitsText(p.units)}, ${FlashPlan.kb(p.units.sumOf { it.size })}"
-            appendLine(if (ui.backup) "Резервная копия: $units, в папку приложения" else "Резервная копия: ОТКЛЮЧЕНА")
+            appendLine(if (ui.backup) "Резервная копия: $units, в папку приложения; ядро останавливается на время копии" else "Резервная копия: ОТКЛЮЧЕНА")
             append(if (ui.run) "После прошивки: сброс и запуск" else "После прошивки: ядро остановлено")
         } else {
             append("После стирания ядро остаётся остановленным")

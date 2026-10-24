@@ -4,6 +4,9 @@ import android.content.Context
 import io.github.viacheslavmezentsev.hwlivetest.firmware.HistoryEntry
 import org.json.JSONObject
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 /** История операций прошивки: `history.jsonl` в папке приложения (ТЗ прошивки 5.7.1, 5.7.3). */
 object FlashHistory {
@@ -20,10 +23,10 @@ object FlashHistory {
         return f.readLines().filter { it.isNotBlank() }.takeLast(max).reversed().map { line ->
             try {
                 val j = JSONObject(line)
-                val time = j.optString("time").replace('T', ' ').removeSuffix("Z")
+                val time = localTime(j.optString("time"))
                 val err = j.optString("error").takeIf { !j.isNull("error") && it.isNotEmpty() }
                 buildString {
-                    append("$time UTC  ${j.optString("action")}: ${j.optString("result")}")
+                    append("$time  ${j.optString("action")}: ${j.optString("result")}")
                     append("\n  ${j.optString("mcu")}")
                     if (!j.isNull("file")) append(", ${j.optString("file")}")
                     if (!j.isNull("units")) append(", ${j.optString("units")}")
@@ -34,6 +37,14 @@ object FlashHistory {
                 line
             }
         }
+    }
+
+    /** Время записи (UTC в файле) — в часовом поясе телефона. */
+    private fun localTime(iso: String): String = try {
+        val utc = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ROOT).format(utc.parse(iso)!!)
+    } catch (_: Exception) {
+        iso
     }
 
     fun clear(c: Context) {
