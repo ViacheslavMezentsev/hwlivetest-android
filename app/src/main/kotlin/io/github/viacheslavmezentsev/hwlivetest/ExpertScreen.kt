@@ -144,8 +144,9 @@ private fun SignalCard(field: Field, reading: FieldSampler.Reading?, onClick: ()
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(field.shortName, style = MaterialTheme.typography.titleSmall)
             val value = reading?.value
+            val error = reading?.error
             Text(when {
-                reading?.error != null -> reading.error
+                error != null -> error
                 value != null -> field.format(value) + if (reading.outOfRange) " (вне границ)" else ""
                 else -> "—"
             }, style = MaterialTheme.typography.titleLarge,
