@@ -15,7 +15,11 @@ val gitSha: String = System.getenv("GITHUB_SHA")?.take(8) ?: runCatching {
         isIgnoreExitValue = true
     }.standardOutput.asText.get().trim()
 }.getOrDefault("").ifEmpty { "unknown" }
-val buildTime: String = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
+val buildInstant: Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
+val buildTime: String = buildInstant.toString()
+// versionCode — минуты от 2026-01-01 UTC: растёт с каждой сборкой, и локальной, и в CI, поэтому
+// любой более новый APK ставится поверх старого без удаления (данные приложения сохраняются).
+val versionMinutes: Int = ((buildInstant.epochSecond - Instant.parse("2026-01-01T00:00:00Z").epochSecond) / 60).toInt()
 val ciRun: Int? = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
 
 android {
@@ -26,8 +30,7 @@ android {
         applicationId = "io.github.viacheslavmezentsev.hwlivetest"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        // Номер запуска GitHub Actions растёт с каждой сборкой CI: по нему видно, что APK новый.
-        versionCode = ciRun ?: 1
+        versionCode = versionMinutes
         versionName = "0.2.0"
         buildConfigField("String", "GIT_SHA", "\"$gitSha\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
