@@ -61,7 +61,8 @@ class ChartRenderer(private val density: Float) {
 
     private fun dp(v: Float) = v * density
 
-    private val muted = Color.rgb(0x57, 0x60, 0x6A)
+    private var muted = Color.rgb(0x57, 0x60, 0x6A)
+    private val background = Paint().apply { color = Color.WHITE }
     private val grid = Paint().apply {
         color = Color.rgb(0xD0, 0xD7, 0xDE)
         strokeWidth = dp(1f)
@@ -84,9 +85,18 @@ class ChartRenderer(private val density: Float) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val path = Path()
 
+    fun setColors(surface: Int, foreground: Int, gridColor: Int) {
+        background.color = surface
+        bg.color = surface
+        muted = foreground
+        grid.color = gridColor
+        axisLine.color = foreground
+        axisText.color = foreground
+    }
+
     fun draw(canvas: Canvas, width: Float, height: Float) {
         legendRow = 0f
-        canvas.drawColor(Color.WHITE)
+        canvas.drawRect(0f, 0f, width, height, background)
         val from = nowMs - windowMs
         val windows = lines.map { it.series.window(from, nowMs) }
         val axes: List<ChartScale.Axis> = if (ownScale) {
