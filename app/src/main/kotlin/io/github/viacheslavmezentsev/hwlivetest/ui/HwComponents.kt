@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -65,9 +66,9 @@ fun HwScreen(
     title: String,
     onBack: (() -> Unit)? = null,
     scrolling: Boolean = true,
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val now = rememberClock()
     // Светлая тема: шапка цвета бренда; тёмная: тёмно-синяя, в цвет строки состояния (brand_dark).
     val dark = isSystemInDarkTheme()
     val barColor = if (dark) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary
@@ -78,11 +79,7 @@ fun HwScreen(
                 title = {
                     Column {
                         Text(title, style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            ClockFormat.format(Date(now)) + "  ·  v" + BuildConfig.VERSION_NAME,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = barContent.copy(alpha = 0.8f),
-                        )
+                        HeaderClock(barContent)
                     }
                 },
                 navigationIcon = {
@@ -96,7 +93,9 @@ fun HwScreen(
                     containerColor = barColor,
                     titleContentColor = barContent,
                     navigationIconContentColor = barContent,
+                    actionIconContentColor = barContent,
                 ),
+                actions = actions,
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -111,6 +110,14 @@ fun HwScreen(
             content = content,
         )
     }
+}
+
+/** Часы инвалидируют только свою строку, не содержимое экрана и всплывающее меню. */
+@Composable
+private fun HeaderClock(color: Color) {
+    val now = rememberClock()
+    Text(ClockFormat.format(Date(now)) + "  ·  v" + BuildConfig.VERSION_NAME,
+        style = MaterialTheme.typography.bodySmall, color = color.copy(alpha = 0.8f))
 }
 
 /** Блок сведений: заголовок цветом бренда и строки; [mono] — моноширинный выделяемый текст. */

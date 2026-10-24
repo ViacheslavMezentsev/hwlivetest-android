@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import io.github.viacheslavmezentsev.hwlivetest.stlink.hex32
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.Field
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.FieldCatalog
@@ -49,15 +53,16 @@ fun ExpertScreen(
     val filtered = remember(ui.fields, query, activeType) { FieldCatalog.filter(ui.fields, query, activeType) }
     val groups = remember(filtered, grouping) { FieldCatalog.group(filtered, grouping) }
     val colors = LocalStatusColors.current
+    val listState = rememberLazyListState()
 
-    HwScreen("Режим эксперта", onBack = onBack, scrolling = false) {
-        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item(key = "navigation") {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = { showLog = true }) { Text("Журнал") }
+    // ТЗ прошивки 5.9.9: навигация не входит в обновляемый список показаний.
+    HwScreen("Режим эксперта", onBack = onBack, scrolling = false, actions = {
                     Box {
-                        TextButton(onClick = { menu = true }, enabled = !ui.busy) { Text("Меню") }
+                        IconButton(onClick = { menu = true }, enabled = !ui.busy) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Меню")
+                        }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text("Журнал") }, onClick = { menu = false; showLog = true })
                             for ((label, screen) in listOf("Цель" to TargetActivity::class.java,
                                 "Прошивка" to FlashActivity::class.java, "О программе" to AboutActivity::class.java)) {
                                 DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; onNavigate(screen) })
@@ -65,8 +70,8 @@ fun ExpertScreen(
                             DropdownMenuItem(text = { Text("Простой режим") }, onClick = { menu = false; onBack() })
                         }
                     }
-                }
-            }
+    }) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "connection") {
                 SectionCard("Подключение") {
                     Text(ui.status.ifEmpty { if (ui.connected) "Подключено" else "Подключите ST-Link через OTG" },
@@ -117,7 +122,7 @@ fun ExpertScreen(
                     }
                 }
                 if (group !in collapsed) items(fields, key = { "field:" + it.topic }) { field ->
-                    SignalCard(field, ui.readings[field.topic], onClick = { onChart(field) })
+                    SignalCard(field, reading = { ui.readings[field.topic] }, onClick = { onChart(field) })
                 }
             }
         }
@@ -137,20 +142,21 @@ private fun CatalogChoice(label: String, choices: List<Pair<String, String>>, on
 }
 
 @Composable
-private fun SignalCard(field: Field, reading: FieldSampler.Reading?, onClick: () -> Unit) {
+private fun SignalCard(field: Field, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
     val colors = LocalStatusColors.current
     val check = Session.check(field)
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(field.shortName, style = MaterialTheme.typography.titleSmall)
-            val value = reading?.value
-            val error = reading?.error
+            val sample = reading()
+            val value = sample?.value
+            val error = sample?.error
             Text(when {
                 error != null -> error
-                value != null -> field.format(value) + if (reading.outOfRange) " (вне границ)" else ""
+                value != null -> field.format(value) + if (sample.outOfRange) " (вне границ)" else ""
                 else -> "—"
-            }, style = MaterialTheme.typography.titleLarge,
-                color = if (reading?.error != null || reading?.outOfRange == true) colors.bad else MaterialTheme.colorScheme.onSurface)
+            }, style = MaterialTheme.typography.titleLarge, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                color = if (error != null || sample?.outOfRange == true) colors.bad else MaterialTheme.colorScheme.onSurface)
             Text(field.topic, style = MonoText, color = colors.muted)
             Text(field.address.hex32() + " · " + field.typeLabel + (field.sizeBits?.let { " · $it бит" } ?: ""), style = MonoText)
             field.expr?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

@@ -29,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import io.github.viacheslavmezentsev.hwlivetest.firmware.ElfFile
 import io.github.viacheslavmezentsev.hwlivetest.firmware.FlashErrorKind
 import io.github.viacheslavmezentsev.hwlivetest.firmware.FlashLayout
@@ -59,7 +61,16 @@ import java.util.Date
 import java.util.Locale
 
 /** Состояние экрана «Прошивка». Меняется только в главном потоке. */
-class FlashUi {
+class FlashUi : ViewModel() {
+    var segments: List<Segment>? = null
+    var fileBytes = 0
+    var fileSha: String? = null
+    var voltage: Double? = null
+    var flashPlan: FlashPlan? = null
+    var signals: SignalTable? = null
+    @Volatile var cancel = false
+    override fun onCleared() { cancel = true }
+    var readOnly by mutableStateOf(false)
     var status by mutableStateOf("")
     var error by mutableStateOf(false)
     var connected by mutableStateOf(false)
@@ -93,33 +104,51 @@ class FlashUi {
  * прошивка с резервной копией и сверкой, история и отчёт.
  */
 class FlashActivity : ComponentActivity() {
-    private val ui = FlashUi()
+    private val ui by lazy { ViewModelProvider(this)[FlashUi::class.java] }
     private lateinit var connector: Connector
 
-    private var segments: List<Segment>? = null
-    private var fileBytes = 0
-    private var fileSha: String? = null
-    private var voltage: Double? = null
-    private var plan: FlashPlan? = null
+    private var segments: List<Segment>?
+        get() = ui.segments
+        set(value) { ui.segments = value }
+    private var fileBytes: Int
+        get() = ui.fileBytes
+        set(value) { ui.fileBytes = value }
+    private var fileSha: String?
+        get() = ui.fileSha
+        set(value) { ui.fileSha = value }
+    private var voltage: Double?
+        get() = ui.voltage
+        set(value) { ui.voltage = value }
+    private var plan: FlashPlan?
+        get() = ui.flashPlan
+        set(value) { ui.flashPlan = value }
 
     /** Таблица сигналов из ELF; подключается к цели, только когда Flash совпала с образом. */
-    private var signals: SignalTable? = null
+    private var signals: SignalTable?
+        get() = ui.signals
+        set(value) { ui.signals = value }
 
-    @Volatile
-    private var cancel = false
+    private var cancel: Boolean
+        get() = ui.cancel
+        set(value) { ui.cancel = value }
 
     private val openHex = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { loadHex(it) } }
+    private val createBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        uri?.let { backupAll(it) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ui.readOnly = intent.getBooleanExtra(EXTRA_READ_ONLY, false)
         connector = Connector(this) { text, tone ->
             ui.status = text
             ui.error = tone == Connector.Tone.ERROR
+            if (ui.error) ui.busy = false
         }
         Session.stopPolling()
         ui.backup = Prefs.flashBackup(this)
         sync()
-        if (Session.stlink != null) readVoltage()
+        if (Session.stlink != null && !ui.busy) readVoltage()
         setContent {
             HwTheme {
                 FlashScreen(
@@ -128,8 +157,11 @@ class FlashActivity : ComponentActivity() {
                         back = { leave() },
                         connect = { connect() },
                         pickFile = { openHex.launch(arrayOf("*/*")) },
+                        backupAll = { askBackupFile() },
                         expectedSha = { ui.expectedSha = it; rebuildPlan() },
-                        writeMode = { on -> if (on) Session.enableWriteMode() else Session.disableWriteMode(); sync() },
+                        writeMode = { on ->
+                            if (!ui.readOnly) { if (on) Session.enableWriteMode() else Session.disableWriteMode(); sync() }
+                        },
                         backup = { on -> ui.backup = on; Prefs.setFlashBackup(this, on); rebuildPlan() },
                         run = { on -> ui.run = on },
                         check = { check() },
@@ -316,6 +348,7 @@ class FlashActivity : ComponentActivity() {
     private fun layout(): FlashLayout? = devId()?.let { FlashLayout.of(it, Session.target?.flashSizeKb) }
 
     private fun start(action: String, op: (Flasher, (FlashStep, Long, Long) -> Boolean) -> FlashOutcome) {
+        if (ui.readOnly) return
         val st = Session.stlink ?: return
         val layout = layout()
         if (layout == null) {
@@ -426,6 +459,8 @@ class FlashActivity : ComponentActivity() {
         cancel = false
         ui.busy = true
         ui.result = null
+        ui.step = FlashStep.VERIFY.title
+        ui.progress = 0f
         Session.userSaid("нажал «Сверить с MCU»")
         Session.worker.execute {
             st.stats.reset()
@@ -462,6 +497,70 @@ class FlashActivity : ComponentActivity() {
                 ui.result = text + "\n" + timing.joinToString("\n")
                 ui.resultOk = text.startsWith("Совпадает")
                 ui.report = null
+                sync()
+            }
+        }
+    }
+
+    /** ТЗ прошивки 5.2.4: самостоятельная копия без остановки ядра и разрешения записи. */
+    private fun askBackupFile() {
+        if (Session.stlink == null || ui.busy) return
+        if (Session.target?.flashSizeKb == null) {
+            ui.status = "Размер Flash неизвестен — резервная копия недоступна."
+            ui.error = true
+            return
+        }
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
+        createBackup.launch("backup_$stamp.hex")
+    }
+
+    private fun backupAll(uri: Uri) {
+        val st = Session.stlink
+        val kb = Session.target?.flashSizeKb
+        if (st == null || kb == null || kb <= 0) {
+            ui.status = "Для копии нужны подключение и известный размер Flash."
+            ui.error = true
+            return
+        }
+        Session.stopPolling()
+        cancel = false
+        ui.busy = true
+        ui.step = "Резервная копия всей Flash"
+        ui.progress = 0f
+        ui.result = null
+        ui.report = null
+        Session.userSaid("сохранить резервную копию всей Flash ($kb КБ), без остановки ядра")
+        Session.worker.execute {
+            var ok = false
+            val result = try {
+                val total = kb * 1024
+                val data = FlashTools.read(0x08000000L, total, { a, n -> st.readBlock(a, n) }) { done ->
+                    runOnUiThread { ui.progress = done.toFloat() / total }
+                    !cancel
+                }
+                val used = FlashTools.trimErased(data)
+                val hex = IntelHex.write(if (used.isEmpty()) emptyList() else listOf(Segment(0x08000000L, used)))
+                if (cancel) throw FlashTools.CancelledException()
+                contentResolver.openOutputStream(uri, "wt")?.use { it.write(hex.toByteArray(Charsets.US_ASCII)) }
+                    ?: error("Файл не открылся для записи")
+                ok = true
+                "Сохранено ${MainActivity.displayName(this, uri)}: ${used.size} байт (Flash $kb КБ, хвост 0xFF отброшен).\n" +
+                    "SHA-256 образа: ${IntelHex.sha256(used)}" +
+                    if (used.isEmpty()) "\nFlash пустая: записан HEX с записью конца файла." else ""
+            } catch (_: FlashTools.CancelledException) {
+                "Резервная копия отменена. Файл назначения может остаться пустым."
+            } catch (e: Exception) {
+                "Резервная копия: ${ErrorMessages.describe(e)}"
+            }
+            Session.programSaid(result)
+            runOnUiThread {
+                ui.busy = false
+                ui.progress = null
+                ui.step = ""
+                ui.result = result
+                ui.resultOk = ok
+                ui.report = result
+                sync()
             }
         }
     }
@@ -512,10 +611,11 @@ class FlashActivity : ComponentActivity() {
             ui.status = "Дождитесь окончания операции или нажмите «Отмена»."
             return
         }
-        if (ui.halted && Session.writeMode && Session.stlink != null) ui.askLeave = true else finish()
+        if (!ui.readOnly && ui.halted && Session.writeMode && Session.stlink != null) ui.askLeave = true else finish()
     }
 
     private fun leaveRunning() {
+        if (ui.readOnly) { finish(); return }
         ui.busy = true
         Session.worker.execute {
             try {
@@ -527,6 +627,10 @@ class FlashActivity : ComponentActivity() {
             runOnUiThread { finish() }
         }
     }
+
+    companion object {
+        const val EXTRA_READ_ONLY = "read_only_tools"
+    }
 }
 
 /** Обработчики экрана «Прошивка». */
@@ -534,6 +638,7 @@ class FlashActions(
     val back: () -> Unit,
     val connect: () -> Unit,
     val pickFile: () -> Unit,
+    val backupAll: () -> Unit,
     val expectedSha: (String) -> Unit,
     val writeMode: (Boolean) -> Unit,
     val backup: (Boolean) -> Unit,
@@ -563,7 +668,9 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
             InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true)
         }
 
-        SectionCard("Файл") {
+        SectionCard("Резервная копия и сверка · только чтение") {
+            Text("Ядро продолжает работать. Режим «Изменение цели» не требуется.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = actions.backupAll, enabled = ui.connected && !ui.busy) { Text("Сохранить всю Flash в HEX…") }
             OutlinedButton(onClick = actions.pickFile, enabled = !ui.busy) { Text(if (ui.file == null) "Выбрать HEX или ELF…" else "Другой файл…") }
             OutlinedTextField(
                 value = ui.expectedSha,
@@ -584,7 +691,7 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
             OutlinedButton(onClick = actions.check, enabled = ui.connected && ui.file != null && !ui.busy) { Text("Сверить с MCU") }
         }
 
-        SectionCard("Изменение цели") {
+        if (!ui.readOnly) SectionCard("Изменение цели") {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Switch(checked = ui.writeMode, onCheckedChange = actions.writeMode, enabled = !ui.busy)
                 Text("Режим «Изменение цели»", style = MaterialTheme.typography.bodyLarge)

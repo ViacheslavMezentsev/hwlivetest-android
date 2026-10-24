@@ -23,6 +23,7 @@
 
         <activity
             android:name=".SimpleActivity"
+            android:theme="@style/AppTheme.Compose"
             android:exported="true"
             android:launchMode="singleTop">
             <intent-filter>
