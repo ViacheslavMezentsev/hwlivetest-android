@@ -20,11 +20,11 @@ class SettingsActivity : ComponentActivity() {
             val fast by Session.fastActions.collectAsState()
             val route by Session.route.collectAsState()
             var confirmFast by rememberSaveable { mutableStateOf(false) }
-            var backup by rememberSaveable { mutableStateOf(Prefs.flashBackup(this)) }
+            var backup by rememberSaveable { mutableStateOf(Prefs.flashBackup(this@SettingsActivity)) }
             HwScreen("Настройки", onBack = ::finish) {
                 SectionCard("Отображение") {
                     SettingSwitch("Отладочные сведения", debug) {
-                        Prefs.setDebugDetails(this, it); Session.debugDetails.value = it
+                        Prefs.setDebugDetails(this@SettingsActivity, it); Session.debugDetails.value = it
                     }
                     Text("Адреса, регистры, символы ELF, чтение памяти по адресу и подробности обмена.",
                         style = MaterialTheme.typography.bodySmall)
@@ -38,7 +38,7 @@ class SettingsActivity : ComponentActivity() {
                     if (!Session.writeMode) Text("Сначала включите «Изменение цели» на странице «Цель».")
                     Text("Прошивка, стирание и импульс NRST сохраняют подтверждения.", style = MaterialTheme.typography.bodySmall)
                     SettingSwitch("Резервная копия перед прошивкой", backup) {
-                        backup = it; Prefs.setFlashBackup(this, it)
+                        backup = it; Prefs.setFlashBackup(this@SettingsActivity, it)
                     }
                 }
             }
