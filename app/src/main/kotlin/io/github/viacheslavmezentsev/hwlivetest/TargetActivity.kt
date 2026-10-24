@@ -39,6 +39,7 @@ data class Confirm(val title: String, val text: String, val action: () -> Unit)
 /** Состояние экрана «Цель». Меняется только в главном потоке. */
 class TargetUi : androidx.lifecycle.ViewModel() {
     var nextPage: WorkspacePage? = null
+    var nextDirection: Int = 0
     var status by mutableStateOf("")
     var error by mutableStateOf(false)
     var connected by mutableStateOf(false)
@@ -58,7 +59,7 @@ class TargetUi : androidx.lifecycle.ViewModel() {
  */
 class TargetActivity : ComponentActivity(), WorkspaceHost {
     override val workspacePage = WorkspacePage.TARGET
-    override fun navigateWorkspace(page: WorkspacePage) { if (page != workspacePage) leave(page) }
+    override fun navigateWorkspace(page: WorkspacePage, direction: Int) { if (page != workspacePage) leave(page, direction) }
     private val ui by lazy { androidx.lifecycle.ViewModelProvider(this)[TargetUi::class.java] }
     private val sessionChanged: () -> Unit = { sync() }
     override fun onResume() {
@@ -159,6 +160,7 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
             try {
                 val tw = Session.targetWrite()
                 Session.logLine("# изменение цели: $name…")
+                Session.clearTelemetry(name)
                 val state = op(tw) ?: tw.coreState()
                 succeeded = true
                 Session.logLine("# изменение цели: $name → ${state.title}")
@@ -186,15 +188,16 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
     }
 
     /** ТЗ ST-Link 2.0, п. 5.11.8: уходя с остановленным ядром — спросить, запустить ли его. */
-    private fun leave(page: WorkspacePage? = null) {
+    private fun leave(page: WorkspacePage? = null, direction: Int = 0) {
         if (ui.busy) return
         ui.nextPage = page
+        ui.nextDirection = direction
         if (Session.core?.halted == true && Session.writeMode && Session.stlink != null) ui.askLeave = true else completeLeave()
     }
     private fun completeLeave() {
         val page = ui.nextPage
         ui.nextPage = null
-        if (page == null) WorkspaceNavigation.home(this) else WorkspaceNavigation.open(this, page)
+        if (page == null) WorkspaceNavigation.home(this) else WorkspaceNavigation.open(this, page, ui.nextDirection)
     }
 }
 
@@ -216,8 +219,8 @@ fun TargetScreen(
         if (!ui.connected) {
             Button(onClick = onConnect, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Подключить и опознать") }
         } else {
-            InfoCard("Адаптер", ui.adapter.lines().filter { it.isNotBlank() }, mono = true)
-            InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true)
+            InfoCard("Адаптер", ui.adapter.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
+            InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
         }
 
         val core = ui.core

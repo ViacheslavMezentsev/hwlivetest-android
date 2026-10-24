@@ -74,6 +74,12 @@ class ChartActivity : ComponentActivity() {
             onPause = { ui.paused = !ui.paused; ui.pausedAt = Session.nowMs(); refresh() },
             onRecord = ::toggleRecording,
             onExport = { withFolder("export", ::exportBuffer) },
+            onClear = {
+                if (!ui.recordBusy && Session.recording == null) Session.worker.execute {
+                    Session.clearTelemetry("пользователь начал новый интервал")
+                    runOnUiThread { ui.paused = false; ui.message = "История очищена. Накапливаются новые отсчёты."; refresh() }
+                }
+            },
             onShare = { saved -> Recording.share(this, saved.uri, saved.name) },
             onFolder = { ui.afterFolder = null; folderPicker.launch(Recording.pickFolderIntent()) },
         ) } }

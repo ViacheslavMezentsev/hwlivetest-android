@@ -17,6 +17,12 @@ import androidx.compose.ui.unit.sp
 import io.github.viacheslavmezentsev.hwlivetest.Session
 import io.github.viacheslavmezentsev.hwlivetest.WorkspaceHost
 import io.github.viacheslavmezentsev.hwlivetest.WorkspacePage
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -99,7 +105,7 @@ fun HwScreen(
             onDragCancel = { distance = 0f },
             onHorizontalDrag = { change, dx -> change.consume(); distance += dx },
             onDragEnd = {
-                if (kotlin.math.abs(distance) >= threshold) host.navigateWorkspace(page.next(if (distance < 0) 1 else -1))
+                if (kotlin.math.abs(distance) >= threshold) host.navigateWorkspace(page.next(if (distance < 0) 1 else -1), if (distance < 0) 1 else -1)
             },
         )
     } else Modifier
@@ -170,44 +176,39 @@ private fun HeaderClock(color: Color) {
 
 /** Блок сведений: заголовок цветом бренда и строки; [mono] — моноширинный выделяемый текст. */
 @Composable
-fun InfoCard(title: String, lines: List<String>, mono: Boolean = false, accent: Color? = null) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                color = accent ?: MaterialTheme.colorScheme.primary,
-            )
-            SelectionContainer {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    for (line in lines) {
-                        Text(
-                            line,
-                            style = if (mono) MonoText else MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
+fun InfoCard(title: String, lines: List<String>, mono: Boolean = false, accent: Color? = null,
+    collapsible: Boolean = false,
+) {
+    SectionCard(title, collapsible, accent) {
+        SelectionContainer {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                for (line in lines) Text(line,
+                    style = if (mono) MonoText else MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }
 }
 
-/** Раздел экрана: карточка с заголовком цветом бренда и произвольным содержимым. */
+/** ТЗ прошивки 5.16: технические сведения по умолчанию свёрнуты, выбор переживает поворот. */
 @Composable
-fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
+fun SectionCard(title: String, collapsible: Boolean = false, accent: Color? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    var expanded by rememberSaveable(title) { mutableStateOf(false) }
+    Card(modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            content()
+            Text((if (collapsible) (if (expanded) "▾  " else "▸  ") else "") + title,
+                modifier = if (collapsible) Modifier.fillMaxWidth()
+                    .semantics { stateDescription = if (expanded) "Развёрнуто" else "Свёрнуто" }
+                    .clickable(role = Role.Button) { expanded = !expanded }.padding(vertical = 8.dp)
+                    else Modifier,
+                style = MaterialTheme.typography.titleSmall,
+                color = accent ?: MaterialTheme.colorScheme.primary)
+            if (!collapsible || expanded) content()
         }
     }
 }

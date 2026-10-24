@@ -65,10 +65,10 @@ fun ExpertScreen(
                     if (ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
             }
-            if (ui.adapter.isNotBlank()) item(key = "adapter") { InfoCard("Адаптер", ui.adapter.lines(), mono = true) }
-            if (ui.target.isNotBlank()) item(key = "target") { InfoCard("Микроконтроллер", ui.target.lines(), mono = true) }
+            if (ui.adapter.isNotBlank()) item(key = "adapter") { InfoCard("Адаптер", ui.adapter.lines(), mono = true, collapsible = true) }
+            if (ui.target.isNotBlank()) item(key = "target") { InfoCard("Микроконтроллер", ui.target.lines(), mono = true, collapsible = true) }
             item(key = "read") {
-                SectionCard("Чтение слова") {
+                SectionCard("Чтение слова", collapsible = true) {
                     OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Адрес (hex)") },
                         singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedButton(onClick = { onRead(address) }, enabled = !ui.busy && ui.connected) { Text("Прочитать 32 бита") }

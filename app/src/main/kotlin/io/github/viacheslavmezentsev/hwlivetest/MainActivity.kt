@@ -36,8 +36,8 @@ class ExpertUi : androidx.lifecycle.ViewModel() {
 /** ТЗ прошивки 5.9.7–5.9.8: эксперт на Compose; обмен остаётся в Session.worker. */
 class MainActivity : ComponentActivity(), WorkspaceHost {
     override val workspacePage = WorkspacePage.SIGNALS
-    override fun navigateWorkspace(page: WorkspacePage) {
-        if (!ui.busy && page != workspacePage) WorkspaceNavigation.open(this, page)
+    override fun navigateWorkspace(page: WorkspacePage, direction: Int) {
+        if (!ui.busy && page != workspacePage) WorkspaceNavigation.open(this, page, direction)
     }
     private val ui by lazy { androidx.lifecycle.ViewModelProvider(this)[ExpertUi::class.java] }
     private lateinit var connector: Connector

@@ -30,7 +30,7 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.*
 @Composable
 fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -> Unit,
     onTopics: (List<String>) -> Unit, onPause: () -> Unit, onRecord: () -> Unit,
-    onExport: () -> Unit, onFolder: () -> Unit, onShare: (SavedRecording) -> Unit,
+    onExport: () -> Unit, onClear: () -> Unit, onFolder: () -> Unit, onShare: (SavedRecording) -> Unit,
 ) {
     var choosing by rememberSaveable { mutableStateOf(false) }
     var chosen by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -42,6 +42,7 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
         AppMenu(actions = listOf(
             MenuAction("Сохранить буфер в MCAP", run = onExport),
             MenuAction("Папка записей", run = onFolder),
+            MenuAction("Очистить график", enabled = !recording && !ui.recordBusy, run = onClear),
         ), navigationEnabled = !recording && !ui.recordBusy)
     }) {
         BoxWithConstraints(Modifier.fillMaxSize()) {

@@ -167,6 +167,13 @@ object Session {
         notifyChanged()
     }
 
+    /** ТЗ прошивки 5.17: история относится к одному подключению и состоянию программы. Worker only. */
+    fun clearTelemetry(reason: String) {
+        sampler?.clear()
+        logLine("# история графиков очищена: $reason")
+        notifyChanged()
+    }
+
     fun field(topic: String): Field? = fieldsFile?.fields?.firstOrNull { it.topic == topic }
 
     /** Проверка адреса поля по размерам Flash/SRAM опознанного MCU. */
@@ -243,6 +250,7 @@ object Session {
 
     fun closeConnection() {
         stopPolling()
+        sampler?.clear()
         stlink?.disconnect()
         stlink = null
         connection = null

@@ -26,7 +26,7 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.*
 class JournalActivity : ComponentActivity(), WorkspaceHost {
     private var workspace by mutableStateOf(false)
     override val workspacePage get() = if (workspace) WorkspacePage.JOURNAL else null
-    override fun navigateWorkspace(page: WorkspacePage) { if (workspacePage != null && page != workspacePage) WorkspaceNavigation.open(this, page) }
+    override fun navigateWorkspace(page: WorkspacePage, direction: Int) { if (workspacePage != null && page != workspacePage) WorkspaceNavigation.open(this, page, direction) }
     override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); setIntent(intent); workspace = intent.getBooleanExtra(WorkspaceNavigation.EXTRA_WORKSPACE, false) }
     private fun back() { if (workspacePage == null) finish() else WorkspaceNavigation.home(this) }
     private var entries by mutableStateOf(emptyList<SessionLog.Entry>())

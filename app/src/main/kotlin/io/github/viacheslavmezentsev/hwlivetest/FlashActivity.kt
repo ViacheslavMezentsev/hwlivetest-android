@@ -62,6 +62,7 @@ import java.util.Locale
 /** Состояние экрана «Прошивка». Меняется только в главном потоке. */
 class FlashUi : ViewModel() {
     var nextPage: WorkspacePage? = null
+    var nextDirection: Int = 0
     var segments: List<Segment>? = null
     var fileBytes = 0
     var fileSha: String? = null
@@ -106,7 +107,7 @@ class FlashUi : ViewModel() {
  */
 class FlashActivity : ComponentActivity(), WorkspaceHost {
     override val workspacePage: WorkspacePage? get() = if (ui.readOnly) null else WorkspacePage.FLASH
-    override fun navigateWorkspace(page: WorkspacePage) { if (!ui.readOnly && page != workspacePage) leave(page) }
+    override fun navigateWorkspace(page: WorkspacePage, direction: Int) { if (!ui.readOnly && page != workspacePage) leave(page, direction) }
     private val sessionChanged: () -> Unit = { sync(); if (!ui.busy) rebuildPlan() }
     override fun onResume() {
         super.onResume()
@@ -409,7 +410,9 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
             Session.logLine("# изменение цели: $action…")
             st.stats.reset()
             val outcome = try {
-                val f = Flasher(st, Session.targetWrite(), layout, psize, canWrite16())
+                val writer = Session.targetWrite()
+                Session.clearTelemetry(action)
+                val f = Flasher(st, writer, layout, psize, canWrite16())
                 op(f, progress)
             } catch (e: Exception) {
                 FlashOutcome(false, FlashErrorKind.CANCELLED, ErrorMessages.describe(e), null, 0, false, null)
@@ -634,12 +637,13 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         startActivity(Intent.createChooser(send, "Отправить отчёт"))
     }
 
-    private fun leave(page: WorkspacePage? = null) {
+    private fun leave(page: WorkspacePage? = null, direction: Int = 0) {
         if (ui.busy) {
             ui.status = "Дождитесь окончания операции или нажмите «Отмена»."
             return
         }
         ui.nextPage = page
+        ui.nextDirection = direction
         if (!ui.readOnly && Session.core?.halted == true && Session.writeMode && Session.stlink != null) ui.askLeave = true else completeLeave()
     }
 
@@ -648,7 +652,9 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         ui.busy = true
         Session.worker.execute {
             try {
-                Session.updateCore(Session.targetWrite().detach())
+                val writer = Session.targetWrite()
+                Session.clearTelemetry("запуск перед уходом")
+                Session.updateCore(writer.detach())
                 Session.logLine("# изменение цели: запуск перед уходом")
                 runOnUiThread { ui.busy = false; completeLeave() }
             } catch (e: Exception) {
@@ -663,7 +669,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         ui.nextPage = null
         if (ui.readOnly) finish()
         else if (page == null) WorkspaceNavigation.home(this)
-        else WorkspaceNavigation.open(this, page)
+        else WorkspaceNavigation.open(this, page, ui.nextDirection)
     }
 
     companion object {
@@ -702,7 +708,7 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
         if (!ui.connected) {
             Button(onClick = actions.connect, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Подключить и опознать") }
         } else {
-            InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true)
+            InfoCard("Микроконтроллер", ui.target.lines().filter { it.isNotBlank() }, mono = true, collapsible = true)
         }
 
         SectionCard("Резервная копия и сверка · только чтение") {
