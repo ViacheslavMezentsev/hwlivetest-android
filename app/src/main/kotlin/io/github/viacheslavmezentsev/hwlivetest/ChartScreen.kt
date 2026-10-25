@@ -35,7 +35,7 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
 ) {
     var editingRate by rememberSaveable { mutableStateOf(false) }
     var rateDraft by rememberSaveable { mutableStateOf(PollingRate.DEFAULT_HZ) }
-    val editRate = { rateDraft = ui.pollingHz; editingRate = true }
+    val editRate = { rateDraft = ui.recordHz; editingRate = true }
     var choosing by rememberSaveable { mutableStateOf(false) }
     var chosen by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var channelQuery by rememberSaveable { mutableStateOf("") }
@@ -82,13 +82,12 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
     }
     if (editingRate) AlertDialog(
         onDismissRequest = { editingRate = false },
-        title = { Text("Частота опроса") },
+        title = { Text("Частота ${if (ui.recordRtt) "RTT" else "SWD"}") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("SWD · $rateDraft Гц")
-            Slider(value = rateDraft.toFloat(), onValueChange = { rateDraft = it.toInt() },
-                valueRange = PollingRate.MIN_HZ.toFloat()..PollingRate.MAX_HZ.toFloat(), steps = 18)
-            Text("Применяется сразу, в том числе во время записи. История сохраняется. " +
-                "Фактическая частота зависит от скорости чтения устройства.")
+            Text("${if (ui.recordRtt) "RTT" else "SWD"} · $rateDraft Гц")
+            RecordingRateSlider(ui.recordRtt, rateDraft, onChange = { rateDraft = it })
+            Text(if (ui.recordRtt) "Частота выборки при следующем запуске записи RTT."
+                else "Применяется сразу. История сохраняется; фактическая частота зависит от скорости чтения.")
         } },
         confirmButton = { TextButton(onClick = { onPollingHz(rateDraft); editingRate = false }) { Text("Применить") } },
         dismissButton = { TextButton(onClick = { editingRate = false }) { Text("Отмена") } },
@@ -135,7 +134,7 @@ private fun ChartSummary(ui: ChartUi, selected: Int, onRate: () -> Unit) {
             (line?.series?.lastValue()?.let(line.format) ?: "—")),
             style = MaterialTheme.typography.headlineMedium,
             color = if (ui.error != null) MaterialTheme.colorScheme.error else line?.let { Color(it.color) } ?: MaterialTheme.colorScheme.onSurface)
-        TextButton(onClick = onRate, enabled = !ui.recordBusy && ui.rttRunner == null) { Text(if (ui.rttRunner != null) "Запись RTT: ${RttDoctorActivity.sampleHz} Гц" else "Опрос SWD: ${ui.pollingHz} Гц · изменить") }
+        TextButton(onClick = onRate, enabled = !ui.recordBusy && ui.rttRunner == null) { Text("${if (ui.recordRtt) "RTT" else "SWD"} · ${ui.recordHz} Гц" + if (ui.rttRunner == null) " · изменить" else "") }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for ((label, ms) in listOf("30 с" to 30_000L, "1 мин" to 60_000L, "5 мин" to 300_000L)) {
                 FilterChip(selected = ui.windowMs == ms, onClick = { ui.windowMs = ms }, label = { Text(label) })
@@ -177,7 +176,7 @@ private fun ChartStatistics(ui: ChartUi, fields: List<Field>, selected: Int) {
                 modifier = Modifier.fillMaxWidth().clickable { ui.selectedTopic = ui.topics[index] }.padding(vertical = 6.dp),
                 style = MaterialTheme.typography.bodyMedium, color = Color(l.color))
         }
-        if (debug) Text("%.1f Гц, проход опроса %d мс".format(rate, ui.pollMs), style = MaterialTheme.typography.bodySmall)
+        if (debug) Text(if (ui.rttRunner != null) "RTT: ${ui.recordHz} Гц; точки графика сокращены" else "SWD: проход опроса ${ui.pollMs} мс; ряд %.1f точки/с".format(rate), style = MaterialTheme.typography.bodySmall)
         if (ui.paused && ui.connected) Text(if (recording) "График на паузе. Опрос и запись продолжаются." else "График на паузе. Опрос продолжается.", style = MaterialTheme.typography.bodySmall)
         if (ui.message.isNotEmpty()) Text(ui.message)
         if (!debug) fields.filter { f -> fields.count { it.shortName == f.shortName } > 1 }.forEach { Text(it.topic, style = MaterialTheme.typography.bodySmall) }

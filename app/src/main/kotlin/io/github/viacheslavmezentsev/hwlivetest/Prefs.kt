@@ -7,6 +7,14 @@ object Prefs {
     fun recordRtt(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("record_rtt", false)
     fun setRecordRtt(c: Context, value: Boolean) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("record_rtt", value).apply()
 
+    fun rttHz(c: Context): Int = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getInt("rtt_hz", 100)
+        .takeIf { it in io.github.viacheslavmezentsev.hwlivetest.firmware.RttImageBuilder.sampleRates } ?: 100
+    fun setRttHz(c: Context, hz: Int) {
+        require(hz in io.github.viacheslavmezentsev.hwlivetest.firmware.RttImageBuilder.sampleRates)
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putInt("rtt_hz", hz).apply()
+    }
+    fun effectiveRtt(c: Context) = recordRtt(c) && Session.route.value.ready && runCatching { RttTrial.profile() }.isSuccess
+
     fun pollingHz(c: Context): Int = PollingRate.clamp(c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getInt("polling_hz", PollingRate.DEFAULT_HZ))
     fun setPollingHz(c: Context, hz: Int) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putInt("polling_hz", PollingRate.clamp(hz)).apply()
 

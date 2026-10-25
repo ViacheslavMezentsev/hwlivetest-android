@@ -24,7 +24,10 @@ class SettingsActivity : ComponentActivity() {
             val access by Session.writeAccess.collectAsState()
             var confirmFast by rememberSaveable { mutableStateOf(false) }
             var pollingHz by rememberSaveable { mutableStateOf(Prefs.pollingHz(this@SettingsActivity)) }
+            var rttHz by rememberSaveable { mutableStateOf(Prefs.rttHz(this@SettingsActivity)) }
+            val rttReason = if (!route.ready) "Подключите устройство для выбора RTT" else runCatching { RttTrial.profile() }.exceptionOrNull()?.message
             var rtt by rememberSaveable { mutableStateOf(Prefs.recordRtt(this@SettingsActivity)) }
+            val useRtt = rtt && rttReason == null
             var backup by rememberSaveable { mutableStateOf(Prefs.flashBackup(this@SettingsActivity)) }
             var useSha by rememberSaveable { mutableStateOf(Prefs.useSha(this@SettingsActivity)) }
             HwScreen("Настройки", onBack = ::finish) {
@@ -35,39 +38,30 @@ class SettingsActivity : ComponentActivity() {
                     Text("Адреса, регистры, символы ELF, чтение памяти по адресу и подробности обмена.",
                         style = MaterialTheme.typography.bodySmall)
                 }
-                SectionCard("Опрос устройства") {
-                    // ТЗ RTT 3.1: подготовка RTT не переключает действующий SWD-опрос.
-                    Text("Прямое чтение SWD · используется", style = MaterialTheme.typography.titleMedium)
-                    Text("Телефон читает выбранные поля памяти. Загрузка кода и остановка ядра не требуются.",
-                        style = MaterialTheme.typography.bodySmall)
-                    Text("Частота чтения: $pollingHz Гц")
-                    Slider(value = pollingHz.toFloat(), onValueChange = { pollingHz = it.toInt() },
-                        valueRange = PollingRate.MIN_HZ.toFloat()..PollingRate.MAX_HZ.toFloat(), steps = 18,
-                        onValueChangeFinished = {
-                            Prefs.setPollingHz(this@SettingsActivity, pollingHz)
-                            Session.userSaid("установил частоту SWD-опроса: $pollingHz Гц")
-                        })
-                    Text("От 1 до 20 Гц. Общая настройка для сигналов, графиков и страницы модуля. " +
-                        "Фактическая частота зависит от числа полей и скорости соединения; медленные опросы не догоняются.",
-                        style = MaterialTheme.typography.bodySmall)
-                }
                 SectionCard("Запись") {
                     listOf(false to "Прямое чтение SWD", true to "RTT с таймером · STM32F1/F4").forEach { (value, label) ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = rtt == value, onClick = {
+                            RadioButton(selected = useRtt == value, enabled = !value || rttReason == null, onClick = {
                                 rtt = value; Prefs.setRecordRtt(this@SettingsActivity, value)
                                 Session.userSaid("выбрал метод записи: $label")
                             })
-                            TextButton(onClick = { rtt = value; Prefs.setRecordRtt(this@SettingsActivity, value) }) { Text(label) }
+                            TextButton(enabled = !value || rttReason == null, onClick = { rtt = value; Prefs.setRecordRtt(this@SettingsActivity, value); Session.userSaid("выбрал метод записи: $label") }) { Text(label) }
                         }
                     }
-                    Text(if (rtt) "Кнопка «Запись» на графике запускает RTT для выбранных каналов. Нужны ELF текущей прошивки и включённый доступ."
-                        else "Записываются результаты прямого чтения SWD с частотой опроса выше.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onClick = {
+                    if (rttReason != null) Text("RTT недоступен: $rttReason. Используется SWD.", style = MaterialTheme.typography.bodySmall)
+                    val hz = if (useRtt) rttHz else pollingHz
+                    Text("${if (useRtt) "RTT" else "SWD"} · $hz Гц")
+                    RecordingRateSlider(useRtt, hz, onChange = { if (useRtt) rttHz = it else pollingHz = it }, onFinished = {
+                        if (useRtt) Prefs.setRttHz(this@SettingsActivity, rttHz) else Prefs.setPollingHz(this@SettingsActivity, pollingHz)
+                        Session.userSaid("установил частоту ${if (useRtt) "RTT" else "SWD"}: ${if (useRtt) rttHz else pollingHz} Гц")
+                    })
+                    Text(if (useRtt) "Выборка на устройстве: 100, 500 или 1000 Гц. Нужны ELF прошивки и включённый доступ. До начала записи график обновляется через SWD."
+                        else "Чтение и запись: от 1 до 20 Гц. Фактическая частота зависит от скорости соединения и числа каналов.", style = MaterialTheme.typography.bodySmall)
+                    if (useRtt) OutlinedButton(onClick = {
                         startActivity(android.content.Intent(this@SettingsActivity, RttDoctorActivity::class.java))
-                    }) { Text("Настройка RTT") }
+                    }) { Text("Подготовка RTT · ELF") }
                     Text("Формат: MCAP (ROS 1). Запись идёт до нажатия «Остановить». Экран остаётся включённым. Пауза графика не останавливает запись.", style = MaterialTheme.typography.bodySmall)
-                    if (rtt) Text("RTT временно использует SRAM и таймер платы. При остановке восстанавливается состояние устройства, затем формируется MCAP. При уходе с графика запись останавливается. Не отключайте USB до завершения.", style = MaterialTheme.typography.bodySmall)
+                    if (useRtt) Text("RTT временно использует SRAM и таймер платы. При остановке восстанавливается состояние устройства, затем формируется MCAP. При уходе с графика запись останавливается. Не отключайте USB до завершения.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Действия с устройством") {
                     SettingSwitch("Быстрые действия", fast, route.ready && access) {

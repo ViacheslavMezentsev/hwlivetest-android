@@ -34,7 +34,8 @@ class ChartUi : ViewModel() {
     var error by mutableStateOf<String?>(null)
     var message by mutableStateOf("")
     var recording by mutableStateOf("")
-    var confirmRtt by mutableStateOf(false)
+    var recordRtt by mutableStateOf(false)
+    var recordHz by mutableStateOf(10)
     var rttRunner: RttTrial? = null
     var resumePolling = false
     var recordBusy by mutableStateOf(false)
@@ -92,19 +93,16 @@ class ChartActivity : ComponentActivity() {
         if (ui.topics.isEmpty()) { finish(); return }
         applyTopics()
         setContent { HwTheme {
-            if (ui.confirmRtt) AlertDialog(onDismissRequest = { ui.confirmRtt = false },
-                title = { Text("Начать запись RTT?") },
-                text = { Text("${RttDoctorActivity.sampleHz} Гц, ${fields().size} каналов, до ручной остановки. SRAM и таймер считаются свободными по ELF и текущему состоянию. Возможен конфликт с прошивкой. Ядро временно останавливается при установке и снятии заглушки. Flash не меняется. Не отключайте USB до завершения восстановления.") },
-                confirmButton = { TextButton(onClick = { ui.confirmRtt = false; startRtt() }) { Text("Начать запись") } },
-                dismissButton = { TextButton(onClick = { ui.confirmRtt = false }) { Text("Отмена") } })
             ChartScreen(ui, fields(), Session.fieldsFile?.fields.orEmpty(),
             onBack = ::finish,
             onPollingHz = { hz ->
-                ui.pollingHz = PollingRate.clamp(hz)
-                Prefs.setPollingHz(this, ui.pollingHz)
-                ui.pollingPeriodMs = PollingRate.periodMs(ui.pollingHz)
-                Session.userSaid("установил частоту SWD-опроса на графике: ${ui.pollingHz} Гц")
-                if (resumed) startPolling()
+                if (ui.recordRtt) {
+                    if (ui.rttRunner == null) { Prefs.setRttHz(this, hz); ui.recordHz = hz }
+                } else {
+                    Prefs.setPollingHz(this, hz)
+                    if (resumed) startPolling()
+                }
+                Session.userSaid("установил частоту ${if (ui.recordRtt) "RTT" else "SWD"} на графике: ${ui.recordHz} Гц")
             },
             onTopics = { topics -> Session.userSaid("применил каналы графика: " + topics.joinToString()); ui.topics = topics; applyTopics(); startPolling() },
             onPause = { Session.userSaid(if (ui.paused) "возобновил график" else "приостановил график (опрос и запись продолжаются)"); ui.paused = !ui.paused; ui.pausedAt = Session.nowMs(); refresh() },
@@ -177,6 +175,8 @@ class ChartActivity : ComponentActivity() {
 
     private fun startPolling() {
         if (Session.rttRecording != null) return
+        ui.recordRtt = Prefs.effectiveRtt(this)
+        ui.recordHz = if (ui.recordRtt) Prefs.rttHz(this) else Prefs.pollingHz(this)
         ui.pollingHz = Prefs.pollingHz(this)
         ui.pollingPeriodMs = PollingRate.periodMs(ui.pollingHz)
         val current = ++generation
@@ -228,12 +228,12 @@ class ChartActivity : ComponentActivity() {
             ui.message = "Запись невозможна: нет подключения."
             return
         }
-        if (Prefs.recordRtt(this)) {
+        if (Prefs.effectiveRtt(this)) {
             when {
                 !Session.writeAccess.value -> ui.message = "Включите «Доступ» в шапке графика."
                 RttDoctorActivity.selectedElf == null -> ui.message = "Выберите ELF в настройках → Настройка RTT."
                 fields().any { !RttTrial.eligible(it) } -> ui.message = "RTT поддерживает выровненные поля SRAM без битовых масок. Измените выбор каналов."
-                else -> withFolder("record") { ui.confirmRtt = true }
+                else -> withFolder("record", ::startRtt)
             }
             return
         }
@@ -258,17 +258,18 @@ class ChartActivity : ComponentActivity() {
 
     // ТЗ RTT 2.13: graph owns the recording; worker always restores before conversion/export.
     private fun startRtt() {
+        if (!Session.writeAccess.value || !Prefs.effectiveRtt(this)) { ui.message = "Для RTT нужны совместимое устройство и включённый доступ."; return }
         val elf = RttDoctorActivity.selectedElf ?: return
         val tree = Recording.folder(this) ?: return
         if (ui.rttRunner != null || Session.recording != null || Session.rttRecording != null) return
         val fs = fields()
-        val rate = RttDoctorActivity.sampleHz
+        val rate = Prefs.rttHz(this)
         val runner = RttTrial()
         ui.rttRunner = runner
         Session.rttRecording = runner
         ui.recordBusy = false
         ui.message = ""
-        Session.userSaid("подтвердил запись RTT с графика: $rate Гц, ${fs.size} каналов, до ручной остановки")
+        Session.userSaid("запустил запись RTT с графика при включённом доступе: $rate Гц, ${fs.size} каналов, до ручной остановки")
         Session.stopPolling()
         val directory = File(getExternalFilesDir(null) ?: filesDir, "rtt")
         val appContext = applicationContext

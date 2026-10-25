@@ -24,7 +24,6 @@ class RttDoctorActivity : ComponentActivity() {
         @Volatile private var symbols: RttElfSymbols.Symbols? = null
         private var memory by mutableStateOf("")
         private var busy by mutableStateOf(false)
-        internal var sampleHz by mutableStateOf(100)
     }
     private var exportMessage by mutableStateOf("")
     private var timers by mutableStateOf("")
@@ -96,6 +95,7 @@ class RttDoctorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { HwTheme {
+            val sampleHz = Prefs.rttHz(this@RttDoctorActivity)
             val route by Session.route.collectAsState()
             val debug by Session.debugDetails.collectAsState()
 
@@ -105,24 +105,13 @@ class RttDoctorActivity : ComponentActivity() {
             HwScreen("Настройка RTT", onBack = ::finish,
                 navigationEnabled = !busy) {
                 SectionCard("Запись сигналов · $sampleHz Гц") {
-                    Text("Выберите ELF текущей прошивки и частоту. Запись запускается кнопкой «Запись» на графике; каналы выбираются там же.")
+                    Text("Выберите ELF текущей прошивки. Метод и частота задаются в общих настройках. Запись запускается кнопкой «Запись» на графике; каналы выбираются там же.")
                     if (!route.ready) Text("Сначала подключите плату на странице «Устройство».")
                     OutlinedButton(enabled = !busy, onClick = { openElf.launch(arrayOf("*/*")) }) {
                         Text(if (selectedElf == null) "Выбрать ELF прошивки" else "Заменить ELF прошивки")
                     }
                     if (selectedElf != null) Text("ELF выбран")
                     else if (memory.isNotEmpty()) Text(memory)
-                    Row {
-                        RttImageBuilder.sampleRates.forEach { rate ->
-                            FilterChip(selected = sampleHz == rate, enabled = !busy,
-                                onClick = {
-                                    if (sampleHz != rate) {
-                                        sampleHz = rate
-                                        Session.userSaid("выбрал частоту записи RTT: $rate Гц")
-                                    }
-                                }, label = { Text("$rate Гц") })
-                        }
-                    }
                     Text("Запись идёт до нажатия «Остановить». При уходе с экрана запись остановится с восстановлением устройства.", style = MaterialTheme.typography.bodySmall)
                     Text("Запись RTT · STM32F1 / STM32F4", style = MaterialTheme.typography.bodySmall)
                 }
