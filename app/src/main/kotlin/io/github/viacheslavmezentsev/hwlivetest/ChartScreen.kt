@@ -30,9 +30,12 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.*
 /** ТЗ прошивки 5.11: Canvas заменяет View; оси с гистерезисом сохраняются между кадрами. */
 @Composable
 fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -> Unit,
-    onTopics: (List<String>) -> Unit, onPause: () -> Unit, onRecord: () -> Unit, onConnect: () -> Unit,
+    onPollingHz: (Int) -> Unit, onTopics: (List<String>) -> Unit, onPause: () -> Unit, onRecord: () -> Unit, onConnect: () -> Unit,
     onExport: () -> Unit, onClear: () -> Unit, onFolder: () -> Unit, onShare: (SavedRecording) -> Unit,
 ) {
+    var editingRate by rememberSaveable { mutableStateOf(false) }
+    var rateDraft by rememberSaveable { mutableStateOf(PollingRate.DEFAULT_HZ) }
+    val editRate = { rateDraft = ui.pollingHz; editingRate = true }
     var choosing by rememberSaveable { mutableStateOf(false) }
     var chosen by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var channelQuery by rememberSaveable { mutableStateOf("") }
@@ -60,7 +63,7 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(0.36f).fillMaxHeight().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ChartSummary(ui, selected)
+                        ChartSummary(ui, selected, editRate)
                         ChartControls(ui, own, recording, onPause, onRecord, choose)
                         ChartStatistics(ui, fields, selected)
                     }
@@ -69,7 +72,7 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
             } else {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ChartSummary(ui, selected)
+                    ChartSummary(ui, selected, editRate)
                     ChartPlot(ui, own, selected, Modifier.fillMaxWidth().height(plotHeight))
                     ChartControls(ui, own, recording, onPause, onRecord, choose)
                     ChartStatistics(ui, fields, selected)
@@ -77,6 +80,19 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
             }
         }
     }
+    if (editingRate) AlertDialog(
+        onDismissRequest = { editingRate = false },
+        title = { Text("Частота опроса") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("SWD · $rateDraft Гц")
+            Slider(value = rateDraft.toFloat(), onValueChange = { rateDraft = it.toInt() },
+                valueRange = PollingRate.MIN_HZ.toFloat()..PollingRate.MAX_HZ.toFloat(), steps = 18)
+            Text("Применяется сразу, в том числе во время записи. История сохраняется. " +
+                "Фактическая частота зависит от скорости чтения устройства.")
+        } },
+        confirmButton = { TextButton(onClick = { onPollingHz(rateDraft); editingRate = false }) { Text("Применить") } },
+        dismissButton = { TextButton(onClick = { editingRate = false }) { Text("Отмена") } },
+    )
     ui.saved?.let { saved ->
         AlertDialog(onDismissRequest = { ui.saved = null }, title = { Text(if (saved.error == null) "Запись сохранена" else "Ошибка сохранения") },
             text = { Text(saved.name+"\nСообщений: "+saved.messages+", "+saved.bytes/1024+" КБ."+(saved.error?.let { " Ошибка: "+it } ?: "")) },
@@ -112,13 +128,14 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
 }
 
 @Composable
-private fun ChartSummary(ui: ChartUi, selected: Int) {
+private fun ChartSummary(ui: ChartUi, selected: Int, onRate: () -> Unit) {
     ui.now // TimeSeries потокобезопасен, но не является Compose State.
         val line = ui.lines.getOrNull(selected)
         Text(ui.error ?: ((if (ui.lines.size > 1) line?.name+": " else "") +
             (line?.series?.lastValue()?.let(line.format) ?: "—")),
             style = MaterialTheme.typography.headlineMedium,
             color = if (ui.error != null) MaterialTheme.colorScheme.error else line?.let { Color(it.color) } ?: MaterialTheme.colorScheme.onSurface)
+        TextButton(onClick = onRate, enabled = !ui.recordBusy) { Text("Опрос: ${ui.pollingHz} Гц · изменить") }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for ((label, ms) in listOf("30 с" to 30_000L, "1 мин" to 60_000L, "5 мин" to 300_000L)) {
                 FilterChip(selected = ui.windowMs == ms, onClick = { ui.windowMs = ms }, label = { Text(label) })

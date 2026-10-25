@@ -33,6 +33,7 @@ class ChartUi : ViewModel() {
     var recordBusy by mutableStateOf(false)
     var pollMs by mutableStateOf(0L)
     var pollingPeriodMs by mutableStateOf(100L)
+    var pollingHz by mutableStateOf(PollingRate.DEFAULT_HZ)
     var connecting by mutableStateOf(false)
     var connected by mutableStateOf(false)
     var setupKey = ""
@@ -85,6 +86,13 @@ class ChartActivity : ComponentActivity() {
         applyTopics()
         setContent { HwTheme { ChartScreen(ui, fields(), Session.fieldsFile?.fields.orEmpty(),
             onBack = ::finish,
+            onPollingHz = { hz ->
+                ui.pollingHz = PollingRate.clamp(hz)
+                Prefs.setPollingHz(this, ui.pollingHz)
+                ui.pollingPeriodMs = PollingRate.periodMs(ui.pollingHz)
+                Session.userSaid("установил частоту SWD-опроса на графике: ${ui.pollingHz} Гц")
+                if (resumed) startPolling()
+            },
             onTopics = { topics -> Session.userSaid("применил каналы графика: " + topics.joinToString()); ui.topics = topics; applyTopics(); startPolling() },
             onPause = { Session.userSaid(if (ui.paused) "возобновил график" else "приостановил график (опрос и запись продолжаются)"); ui.paused = !ui.paused; ui.pausedAt = Session.nowMs(); refresh() },
             onRecord = { Session.userSaid(if (Session.recording == null) "нажал «Запись»" else "нажал «Остановить» запись"); toggleRecording() },
@@ -154,10 +162,11 @@ class ChartActivity : ComponentActivity() {
     }
 
     private fun startPolling() {
+        ui.pollingHz = Prefs.pollingHz(this)
+        ui.pollingPeriodMs = PollingRate.periodMs(ui.pollingHz)
         val current = ++generation
         if (!Session.route.value.ready) { ui.error = if (ui.connecting) "Подключение…" else "Нет связи. Ранее полученные данные сохранены."; return }
         ui.error = null
-        ui.pollingPeriodMs = PollingRate.periodMs(Prefs.pollingHz(this))
         Session.startPolling(ui.pollingPeriodMs, ui.topics.toSet(),
             onReadings = { readings ->
                 val error = readings.firstOrNull { it.error != null }?.let { it.spec.shortName+": "+it.error }
