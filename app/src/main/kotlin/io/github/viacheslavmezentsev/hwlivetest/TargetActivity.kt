@@ -117,10 +117,11 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
         ui.profileLabel = Session.target?.let { it.profile.title + if (it.profileOverride != null) " (вручную)" else " (автоматически)" } ?: "не определён"
     }
 
-    private fun connect() {
+    private fun connect(enableAccess: Boolean = false) {
         ui.busy = true
         connector.connect { info ->
             ui.busy = false
+            if (enableAccess && info != null && Session.route.value.ready) Session.enableWriteMode()
             sync()
             if (info != null) refresh()
         }
@@ -147,6 +148,12 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
     }
 
     private fun setWriteMode(on: Boolean) {
+        // ТЗ прошивки 5.23: включение доступа устанавливает соединение, но не выполняет команды ядра.
+        if (on && !Session.route.value.ready) {
+            Session.userSaid("запросил доступ к управлению; требуется подключение")
+            connect(enableAccess = true)
+            return
+        }
         if (on) Session.enableWriteMode() else Session.disableWriteMode(userInitiated = true)
         sync()
     }

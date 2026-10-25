@@ -28,11 +28,21 @@ object ChartSetup {
 
     // ТЗ прошивки 5.22: палитра владельца, красный второй; порядок — порядок отметок.
     val PALETTE = intArrayOf(
-        0xFF005FAF.toInt(), 0xFFAF0000.toInt(), 0xFF00875F.toInt(), 0xFFAF8700.toInt(),
-        0xFF875FAF.toInt(), 0xFF008787.toInt(), 0xFFAF005F.toInt(), 0xFF5F8700.toInt(),
+        0xFF005FAF.toInt(), 0xFFAF0000.toInt(), 0xFF007D57.toInt(), 0xFF957300.toInt(),
+        0xFF77519B.toInt(), 0xFF007575.toInt(), 0xFFAF005F.toInt(), 0xFF5F8700.toInt(),
         0xFFD75F5F.toInt(), 0xFF00AFFF.toInt(), 0xFF00AF5F.toInt(), 0xFFAF5F00.toInt(),
         0xFFAF5FFF.toInt(), 0xFF5F5F87.toInt(), 0xFF875F00.toInt(), 0xFFD75FAF.toInt(),
     )
+
+    // ТЗ прошивки 5.23: тот же порядок оттенков с контрастом для тёмного фона.
+    private val DARK_PALETTE = intArrayOf(
+        0xFF58A6FF.toInt(), 0xFFFF6B6B.toInt(), 0xFF3FBF91.toInt(), 0xFFD8B444.toInt(),
+        0xFFB48AE5.toInt(), 0xFF47C5C5.toInt(), 0xFFE56CAD.toInt(), 0xFFA2BF42.toInt(),
+        0xFFFF9191.toInt(), 0xFF46C8FF.toInt(), 0xFF39D98A.toInt(), 0xFFF4AA44.toInt(),
+        0xFFCA8AFF.toInt(), 0xFF9999C5.toInt(), 0xFFC9AB43.toInt(), 0xFFF18ECD.toInt(),
+    )
+
+    fun color(index: Int, dark: Boolean): Int = (if (dark) DARK_PALETTE else PALETTE)[index]
 
     fun colors(topics: List<String>): Map<String, Int> =
         topics.distinct().take(PALETTE.size).withIndex().associate { it.value to it.index }

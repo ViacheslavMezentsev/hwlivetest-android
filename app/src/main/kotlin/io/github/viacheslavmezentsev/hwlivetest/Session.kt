@@ -291,6 +291,8 @@ object Session {
     }
 
     fun closeConnection() {
+        // ТЗ прошивки 5.23: разрешение не должно переживать потерю SWD-соединения.
+        disableWriteMode()
         fastActionsState.value = false
         stopPolling()
         stlink?.disconnect()

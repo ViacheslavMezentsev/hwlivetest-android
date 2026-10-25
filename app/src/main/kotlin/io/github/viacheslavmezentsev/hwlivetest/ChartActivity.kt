@@ -146,7 +146,7 @@ class ChartActivity : ComponentActivity() {
         val fs = fields()
         val colors = ChartSetup.colors(fs.map { it.topic })
         ui.lines = fs.mapNotNull { f -> Session.sampler?.series(f.topic)?.let {
-            ChartRenderer.Line(ChartSetup.label(f, fs), it, ChartRenderer.PALETTE[colors.getValue(f.topic)], f::format)
+            ChartRenderer.Line(ChartSetup.label(f, fs), it, ChartSetup.color(colors.getValue(f.topic), resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES), f::format)
         } }
         if (ui.selectedTopic !in ui.topics) ui.selectedTopic = ui.topics.firstOrNull()
         refresh()

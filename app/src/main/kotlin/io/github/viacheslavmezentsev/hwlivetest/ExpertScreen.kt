@@ -152,7 +152,7 @@ private fun SignalCard(field: Field, debug: Boolean, label: String, polling: Boo
                 SignalDot(active)
                 Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 Checkbox(checked = selectedIndex >= 0, enabled = selectable, onCheckedChange = { onSelect() },
-                    colors = CheckboxDefaults.colors(checkedColor = if (selectedIndex >= 0) androidx.compose.ui.graphics.Color(ChartSetup.PALETTE[selectedIndex]) else MaterialTheme.colorScheme.primary))
+                    colors = CheckboxDefaults.colors(checkedColor = if (selectedIndex >= 0) androidx.compose.ui.graphics.Color(ChartSetup.color(selectedIndex, androidx.compose.foundation.isSystemInDarkTheme())) else MaterialTheme.colorScheme.primary))
             }
             val value = sample?.value
             val error = sample?.error

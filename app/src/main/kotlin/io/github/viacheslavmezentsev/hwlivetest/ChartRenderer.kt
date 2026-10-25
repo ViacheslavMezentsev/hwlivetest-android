@@ -167,8 +167,8 @@ class ChartRenderer(private val density: Float) {
             canvas.drawText(msg, (left + right - axisText.measureText(msg)) / 2, (top + bottom) / 2, axisText)
             return
         }
-        // Линии: по порядку списка, выбранная — сверху и толще.
-        val order = lines.indices.filter { it != selected } + listOf(selected).filter { it in lines.indices }
+        // ТЗ прошивки 5.23: первый отмеченный снизу, последний сверху; выделение не меняет слои.
+        val order = lines.indices
         order.forEach { li ->
             val line = lines[li]
             val w = windows[li]
@@ -261,6 +261,5 @@ class ChartRenderer(private val density: Float) {
         const val GAP_MS = 1_000L
 
         /** ТЗ прошивки 5.22: цвета из образца владельца, в порядке выбора каналов. */
-        val PALETTE = ChartSetup.PALETTE
     }
 }

@@ -183,7 +183,15 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
                         backupAll = { askBackupFile() },
                         expectedSha = { ui.expectedSha = it; rebuildPlan() },
                         writeMode = { on ->
-                            if (!ui.readOnly) { if (on) Session.enableWriteMode() else Session.disableWriteMode(userInitiated = true); sync() }
+                            if (!ui.readOnly) {
+                                if (on && !Session.route.value.ready) {
+                                    Session.userSaid("запросил доступ к управлению; требуется подключение")
+                                    connect(enableAccess = true)
+                                } else {
+                                    if (on) Session.enableWriteMode() else Session.disableWriteMode(userInitiated = true)
+                                    sync()
+                                }
+                            }
                         },
                         run = { on -> ui.run = on },
                         check = { check() },
@@ -215,10 +223,11 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         ui.writeMode = Session.writeMode
     }
 
-    private fun connect() {
+    private fun connect(enableAccess: Boolean = false) {
         ui.busy = true
         connector.connect { info ->
             ui.busy = false
+            if (enableAccess && !ui.readOnly && info != null && Session.route.value.ready) Session.enableWriteMode()
             sync()
             if (info != null) readVoltage()
         }
