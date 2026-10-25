@@ -30,4 +30,11 @@ class RttElfAdviceTest {
     @Test(expected = IllegalArgumentException::class) fun rejectsRamBeyondProfile() {
         RttElfAdvice.inspect(elf(ramSize = 0x20004))
     }
+    @Test fun f1StackBoundsFreeWindowAndRejectsF4Elf() {
+        val a = RttElfAdvice.inspect(elf(sp = 0x20005000), 0x20005000)
+        assertEquals(0x3800L, a.available)
+        try { RttElfAdvice.inspect(elf(), 0x20005000); fail() }
+        catch (_: IllegalArgumentException) {}
+    }
+
 }

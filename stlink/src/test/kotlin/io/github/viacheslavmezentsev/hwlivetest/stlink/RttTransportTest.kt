@@ -77,4 +77,22 @@ class RttTransportTest {
         assertFalse(result.started); assertEquals("configure", result.stage)
         assertNotNull(result.recovery); assertTrue(sim.halted); assertEquals(0, sim.resetCount)
     }
+    @Test fun f1InstallAndRecoveryUseF1RccWithoutTouchingF4Rcc() {
+        tw.write32(0xE000ED08, 0x08000000)
+        tw.write32(0x4002101C, 0x100)
+        tw.write32(0x40023840, 0x1234)
+        val result = RttInstaller(st, tw).install(image().copy(vectorBytes = 236), 0x410)
+        assertTrue(result.toString(), result.started)
+        assertEquals(0x101, sim.word(0x4002101C))
+        assertEquals(0x1234, sim.word(0x40023840))
+        assertEquals(0x4002101CL, result.recovery!!.rccEnable)
+        assertEquals(0x20005000L, result.recovery!!.ramEnd)
+
+    }
+    @Test fun f1ImageOutsideItsSramRejectedBeforeHalt() {
+        try { RttInstaller(st, tw).install(image().copy(base = 0x20010000), 0x410); fail() }
+        catch (_: IllegalArgumentException) {}
+        assertFalse(sim.halted)
+    }
+
 }

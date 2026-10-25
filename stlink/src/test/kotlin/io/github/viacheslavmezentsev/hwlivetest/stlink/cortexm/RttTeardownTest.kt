@@ -107,4 +107,15 @@ class RttTeardownTest {
         val result = run(t)
         assertFalse(result.ok); assertEquals("restore", result.stage); assertTrue(t.halted)
     }
+    @Test fun f1RestoresItsRccAndPreservesOtherPeripheralBits() {
+        val t = Target()
+        t.mem[0x4002101C] = 0x101
+        val f1 = plan.copy(rccEnable = 0x4002101C, ramEnd = 0x20005000)
+        val result = RttTeardown(t, t) { t.elapsed() }.run(f1)
+        assertTrue(result.toString(), result.ok)
+        assertEquals(0x100, t.mem[0x4002101C])
+        assertEquals(0x81, t.mem[0x40023840])
+        assertFalse(t.halted)
+    }
+
 }

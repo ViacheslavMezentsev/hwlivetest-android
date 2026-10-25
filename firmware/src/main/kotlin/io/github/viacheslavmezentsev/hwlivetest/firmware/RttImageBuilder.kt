@@ -17,16 +17,17 @@ object RttImageBuilder {
         .chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     fun build(base: Long, available: Long, fields: List<Long>, tick: Long, vectorBytes: Int,
-        timer: RttDoctor.Timer, clockHz: Long, sampleHz: Int = 100): Built {
+        timer: RttDoctor.Timer, clockHz: Long, sampleHz: Int = 100, ramEnd: Long = 0x20020000L): Built {
         require(sampleHz in sampleRates) { "Выберите 100, 500 или 1000 Гц" }
         require(fields.size in 1..6 && timer in RttDoctor.timers)
-        require(base % 16 == 0L && available > 0 && base >= 0x20000000 && base + available <= 0x20020000)
-        require(clockHz in 200..100_000_000 && clockHz % sampleHz == 0L)
+        require(base % 16 == 0L && available > 0 && base >= 0x20000000 && base + available <= ramEnd)
+        require(clockHz in 200..180_000_000 && clockHz % sampleHz == 0L)
+        require(vectorBytes >= (17 + timer.irq) * 4)
         val layout = RttReferenceLayout.calculate(base, fields.size, vectorBytes)
         require(layout.bytes <= available) { "Образ RTT не помещается до запаса стека" }
         val end = base + layout.bytes
         (fields + tick).forEach { address ->
-            require(address in 0x20000000L..0x2001FFFCL && address % 4 == 0L && address !in base until end) {
+            require(address in 0x20000000L..(ramEnd - 4) && address % 4 == 0L && address !in base until end) {
                 "RTT допускает только выровненные слова SRAM вне образа"
             }
         }

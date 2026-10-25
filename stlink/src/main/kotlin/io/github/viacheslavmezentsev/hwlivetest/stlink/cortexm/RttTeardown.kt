@@ -6,7 +6,8 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.TargetWrite
 class RttTeardown(private val memory: DebugMemory, private val write: TargetWrite,
     private val sleep: (Long) -> Unit = Thread::sleep) {
     data class Plan(val timer: RttDoctor.Timer, val stubStart: Long, val stubEnd: Long,
-        val tick: Long, val originalVtor: Int, val originalRcc: Int)
+        val tick: Long, val originalVtor: Int, val originalRcc: Int,
+        val rccEnable: Long = 0x40023840, val ramEnd: Long = 0x20020000)
     data class Counters(val produced: Long, val dropped: Long, val firstTick: Long, val lastTick: Long) {
         companion object {
             fun parse(words: IntArray): Counters {
@@ -24,8 +25,8 @@ class RttTeardown(private val memory: DebugMemory, private val write: TargetWrit
         var captureError: String? = null
         var captureInterrupted = false
         require(plan.timer in RttDoctor.timers && maxSteps in 1..512)
-        require(plan.stubStart >= 0x20000000 && plan.stubEnd <= 0x20020000 && plan.stubEnd > plan.stubStart)
-        require(plan.tick in 0x20000000L..0x2001FFFCL && plan.tick % 4 == 0L)
+        require(plan.stubStart >= 0x20000000 && plan.stubEnd <= plan.ramEnd && plan.stubEnd > plan.stubStart)
+        require(plan.tick in 0x20000000L..(plan.ramEnd - 4) && plan.tick % 4 == 0L)
         val t = plan.timer
         val bank = 4L * (t.irq / 32)
         val bit = 1 shl (t.irq % 32)
@@ -70,8 +71,8 @@ class RttTeardown(private val memory: DebugMemory, private val write: TargetWrit
             }
             stage = "restore"
             write.write32(0xE000ED08, plan.originalVtor); verify(0xE000ED08, plan.originalVtor)
-            val rcc = (memory.read32(0x40023840) and t.clockBit.inv()) or (plan.originalRcc and t.clockBit)
-            write.write32(0x40023840, rcc); verify(0x40023840, rcc)
+            val rcc = (memory.read32(plan.rccEnable) and t.clockBit.inv()) or (plan.originalRcc and t.clockBit)
+            write.write32(plan.rccEnable, rcc); verify(plan.rccEnable, rcc)
             stage = "resume"
             write.go()
             stage = "liveness"

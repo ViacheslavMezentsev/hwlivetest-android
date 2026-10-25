@@ -52,7 +52,7 @@ class SettingsActivity : ComponentActivity() {
                         style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Запись") {
-                    listOf(false to "Прямое чтение SWD", true to "RTT с таймером · F411").forEach { (value, label) ->
+                    listOf(false to "Прямое чтение SWD", true to "RTT с таймером · STM32F1/F4").forEach { (value, label) ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = rtt == value, onClick = {
                                 rtt = value; Prefs.setRecordRtt(this@SettingsActivity, value)

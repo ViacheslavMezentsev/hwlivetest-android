@@ -6,9 +6,9 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.TargetWrite
 class RttRingReader(private val memory: DebugMemory, private val write: TargetWrite,
     private val control: Long, private val buffer: Long, private val size: Int) {
     init {
-        require(control >= 0x20000000 && control + 48 <= 0x20020000 && control % 4 == 0L)
+        require(control >= 0x20000000 && control + 48 <= 0x20050000 && control % 4 == 0L)
         require(size in 16..65536 && size % 4 == 0 && buffer % 4 == 0L)
-        require(buffer >= 0x20000000 && buffer + size <= 0x20020000)
+        require(buffer >= 0x20000000 && buffer + size <= 0x20050000)
         require(control + 48 <= buffer || buffer + size <= control)
     }
     private var expectedRead: Int? = null

@@ -71,7 +71,7 @@ class RttDoctorActivity : ComponentActivity() {
                         out.toByteArray()
                     }
                     val elf = ElfFile.parse(bytes)
-                    val a = RttElfAdvice.inspect(elf)
+                    val a = RttElfAdvice.inspect(elf, RttTrial.profile().ramEnd)
                     val names = RttElfSymbols.inspect(elf)
                     symbols = names
                     selectedElf = elf
@@ -124,25 +124,24 @@ class RttDoctorActivity : ComponentActivity() {
                         }
                     }
                     Text("Запись идёт до нажатия «Остановить». При уходе с экрана запись остановится с восстановлением устройства.", style = MaterialTheme.typography.bodySmall)
-                    if (sampleHz > 100) Text("Экспериментальная частота. После пробы проверьте пропуски и восстановление.", style = MaterialTheme.typography.bodySmall)
-                    Text("Эксперимент · STM32F411", style = MaterialTheme.typography.bodySmall)
+                    Text("Запись RTT · STM32F1 / STM32F4", style = MaterialTheme.typography.bodySmall)
                 }
                 if (debug) {
-                SectionCard("Предлагаемые параметры пробы") {
+                SectionCard("Параметры записи") {
                     Text("Выборка: $sampleHz Гц · буфер: 4 КиБ")
                     Text("Чтение буфера телефоном: каждые 10 мс")
-                    Text("Таймер: первый кандидат из TIM2–TIM5. SRAM: окно по выбранному ELF.", style = MaterialTheme.typography.bodySmall)
+                    Text("Таймер: свободный из профиля устройства (F1: TIM2; F4: TIM2–TIM5). SRAM: окно по выбранному ELF.", style = MaterialTheme.typography.bodySmall)
                     Text("Предполагаемые свободные ресурсы. Запись работает отдельно от обычного SWD-опроса.", style = MaterialTheme.typography.bodySmall)
                     Text("Успешная короткая проба не исключает более позднего использования памяти или таймера прошивкой.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Память по ELF") {
                     OutlinedButton(enabled = !busy, onClick = { openElf.launch(arrayOf("*/*")) }) { Text("Выбрать ELF прошивки") }
                     if (memory.isNotEmpty()) Text(memory)
-                    Text("Оценка для 128 КиБ SRAM F411: запас стека 2 КиБ, буфер 4 КиБ и около 2 КиБ служебных данных. " +
+                    Text("Оценка SRAM по профилю устройства и ELF: запас стека 2 КиБ, буфер 4 КиБ и служебные данные. " +
                         "Динамическая куча, стеки задач и соответствие ELF прошивке устройства не проверены. Резерв нужно подтвердить в прошивке.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Таймеры устройства") {
-                    OutlinedButton(enabled = !busy && route.ready, onClick = ::inspectTimers) { Text("Проверить TIM2–TIM5") }
+                    OutlinedButton(enabled = !busy && route.ready, onClick = ::inspectTimers) { Text("Проверить таймеры") }
                     if (!route.ready) Text("Сначала подключите устройство на странице «Устройство».")
                     if (timers.isNotEmpty()) Text(timers)
                     Text("Кандидат: тактирование и прерывания выключены. Прошивка может включить их позже; выбор требует проверки её конфигурации.", style = MaterialTheme.typography.bodySmall)
@@ -173,14 +172,14 @@ class RttDoctorActivity : ComponentActivity() {
             val adapter = Session.stlink
             val result = runCatching {
                 val target = Session.target ?: error("Устройство отключено")
-                require(target.vendor == McuVendor.STM32 && target.profileOverride == null && (target.idRegister ?: 0) and 0xFFF == 0x431) { "Нужен автоматически опознанный STM32F411" }
+                val profile = RttTrial.profile()
                 val st = adapter ?: error("Адаптер отключён")
                 val s = selected ?: error("Сначала выберите ELF с таблицей символов")
                 val parts = mutableListOf<String>()
                 s.coreClock?.let { address ->
                     val hclk = st.read32(address).toLong() and 0xFFFFFFFFL
-                    val hz = RttDoctor.timerClockHz(hclk, st.read32(0x40023808), st.read32(0x4002388C))
-                    parts += "HCLK по SystemCoreClock: $hclk Гц\nОценка частоты TIM2–TIM5: $hz Гц"
+                    val hz = profile.timerClockHz(st, hclk)
+                    parts += "HCLK по SystemCoreClock: $hclk Гц\nОценка частоты таймера: $hz Гц"
                 } ?: parts.add("SystemCoreClock не найден; частота не определена.")
                 s.tick?.let { (name, address) ->
                     val before = st.read32(address).toLong() and 0xFFFFFFFFL
@@ -210,10 +209,10 @@ class RttDoctorActivity : ComponentActivity() {
             val adapter = Session.stlink
             val result = runCatching {
                 val target = Session.target ?: error("Устройство отключено")
-                require(target.vendor == McuVendor.STM32 && target.profileOverride == null) { "Нужен автоматически опознанный STM32F411" }
-                val observations = RttDoctor.inspectF411(adapter ?: error("Адаптер отключён"), (target.idRegister ?: 0) and 0xFFF)
+                val profile = RttTrial.profile()
+                val observations = RttDoctor.inspect(adapter ?: error("Адаптер отключён"), profile)
                 val suggested = observations.firstOrNull { it.candidate }?.timer?.name
-                (suggested?.let { "Предложение для пробы: $it" } ?: "Подходящих кандидатов нет") + "\n\n" +
+                (suggested?.let { "Таймер для записи: $it" } ?: "Подходящих кандидатов нет") + "\n\n" +
                     observations.joinToString("\n\n") { o ->
                         "${o.timer.name}: ${if (o.candidate) "кандидат" else "занят или требует проверки"}\n" +
                             "Тактирование: ${o.clockEnabled}; CEN: ${o.cr1 and 1}; DIER: 0x${o.dier.toUInt().toString(16)}\n" +

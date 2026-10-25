@@ -30,7 +30,7 @@ object RttElfSymbols {
                 val size = u32(o + 8)
                 val section = (b[o + 14].toInt() and 255) or ((b[o + 15].toInt() and 255) shl 8)
                 if (section in 1 until elf.sections.size && size == 4L && b[o + 12].toInt() and 15 == 1 &&
-                    value in 0x20000000L..0x2001FFFCL && value % 4 == 0L && nameOffset < strings.size) {
+                    value in 0x20000000L..0x2004FFFCL && value % 4 == 0L && nameOffset < strings.size) {
                     val start = strings.offset + nameOffset.toInt()
                     var end = start
                     while (end < strings.offset + strings.size && b[end] != 0.toByte()) end++

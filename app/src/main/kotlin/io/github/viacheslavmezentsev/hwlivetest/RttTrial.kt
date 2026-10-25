@@ -34,27 +34,26 @@ class RttTrial {
             check(Session.recording == null) { "Сначала остановите текущую запись" }
             val adapter = Session.stlink ?: error("Адаптер отключён")
             val target = Session.target ?: error("Устройство отключено")
-            check(target.vendor == McuVendor.STM32 && target.profileOverride == null &&
-                (target.idRegister ?: 0) and 0xFFF == 0x431) { "Нужен автоматически опознанный F411" }
+            val profile = profile()
             val write = Session.targetWrite()
-            val a = RttElfAdvice.inspect(elf)
+            val a = RttElfAdvice.inspect(elf, profile.ramEnd)
             val names = RttElfSymbols.inspect(elf)
             val tick = names.tick?.second ?: error("Tick не найден")
             val clock = names.coreClock ?: error("SystemCoreClock не найден")
+            require(listOf(tick, clock).all { it in 0x20000000L..(profile.ramEnd - 4) }) { "Tick или SystemCoreClock вне SRAM профиля" }
             val before = adapter.read32(tick).toUInt().toLong()
             val started = android.os.SystemClock.elapsedRealtime()
             Thread.sleep(250)
             val elapsed = android.os.SystemClock.elapsedRealtime() - started
             val delta = (adapter.read32(tick).toUInt().toLong() - before) and 0xFFFFFFFFL
             check(delta in elapsed / 2..elapsed * 2) { "Tick не похож на миллисекундный: $delta за $elapsed мс" }
-            val hz = RttDoctor.timerClockHz(adapter.read32(clock).toUInt().toLong(),
-                adapter.read32(0x40023808), adapter.read32(0x4002388C))
-            val timer = RttDoctor.inspectF411(adapter, 0x431).firstOrNull { it.candidate }?.timer
+            val hz = profile.timerClockHz(adapter, adapter.read32(clock).toUInt().toLong())
+            val timer = RttDoctor.inspect(adapter, profile).firstOrNull { it.candidate }?.timer
                 ?: error("Свободного таймера нет")
             val vector = listOf(".isr_vector", ".vectors", ".vector_table", ".intvec", ".vectors_flash")
                 .mapNotNull { elf.section(it) }.firstOrNull { it.address == 0x08000000L }
                 ?: error("Таблица векторов не найдена")
-            val built = RttImageBuilder.build(a.base, a.available, fields.map { it.address }, tick, vector.size, timer, hz, sampleHz)
+            val built = RttImageBuilder.build(a.base, a.available, fields.map { it.address }, tick, vector.size, timer, hz, sampleHz, profile.ramEnd)
             check(directory.isDirectory || directory.mkdirs()) { "Не удалось создать папку отчётов" }
             val stem = "trial-${System.currentTimeMillis()}"
             reportFile = File(directory, "$stem.json")
@@ -68,7 +67,7 @@ class RttTrial {
             var firstTick: Long? = null
             var firstFrameWallMs: Long? = null
             var lastTick: Long? = null
-            val session = RttSession.forDevice(adapter, write, built.image, 0x431,
+            val session = RttSession.forDevice(adapter, write, built.image, profile.deviceId,
                 built.control, built.buffer, built.bufferBytes, built.counters)
             val output = File(directory, "$stem.rtt.bin").outputStream().buffered(65536)
             running = session
@@ -180,8 +179,13 @@ class RttTrial {
             private set
         @Volatile var lastReport: File? = null
             private set
+        fun profile(): RttDeviceProfile {
+            val target = Session.target ?: error("Сначала подключите устройство")
+            require(target.vendor == McuVendor.STM32 && target.profileOverride == null) { "Нужен автоматически опознанный STM32F1/F4" }
+            return RttDeviceProfile.require((target.idRegister ?: 0) and 0xFFF)
+        }
         fun eligible(it: Field): Boolean =
-            it.address in 0x20000000L..0x2001FFFCL && it.address % 4 == 0L &&
+            it.address in 0x20000000L..(runCatching { profile().ramEnd }.getOrDefault(0x20000000L) - 4) && it.address % 4 == 0L &&
                 it.mask == null && it.shift == null && (it.sizeBits == null || it.sizeBits == 32)
 
         fun fields() = Session.fieldsFile?.fields.orEmpty().filter(::eligible).take(6)

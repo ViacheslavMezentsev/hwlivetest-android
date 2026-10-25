@@ -21,9 +21,13 @@ object RttDoctor {
         Timer("TIM4", 0x40000800, 30, 4), Timer("TIM5", 0x40000C00, 50, 8))
 
     fun inspectF411(memory: DebugMemory, deviceId: Int): List<Observation> {
-        require(deviceId == 0x431) { "Проверка таймеров доступна только для опознанного STM32F411" }
-        val clocks = memory.read32(0x40023840)
-        return timers.map { timer ->
+        require(deviceId == 0x431)
+        return inspect(memory, RttDeviceProfile.require(deviceId))
+    }
+
+    fun inspect(memory: DebugMemory, profile: RttDeviceProfile): List<Observation> {
+        val clocks = memory.read32(profile.rccEnable)
+        return profile.timers.map { timer ->
             val bank = 4L * (timer.irq / 32)
             val bit = 1 shl (timer.irq % 32)
             Observation(timer, clocks and timer.clockBit != 0,

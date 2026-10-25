@@ -12,13 +12,14 @@ class RttInstaller(private val memory: DebugMemory, private val write: TargetWri
     fun install(image: Image, deviceId: Int): Result {
         val data = image.bytes.copyOf()
         val end = image.base + data.size
-        require(deviceId == 0x431 && image.timer in RttDoctor.timers)
+        val profile = RttDeviceProfile.require(deviceId)
+        require(image.timer in profile.timers)
         require(data.isNotEmpty() && data.size % 4 == 0 && image.base % 4 == 0L)
-        require(image.base >= 0x20000000 && end <= 0x20020000)
+        require(image.base >= 0x20000000 && end <= profile.ramEnd)
         require(image.stubStart >= image.base && image.stubEnd <= end && image.stubEnd > image.stubStart)
         require(image.stubStart % 2 == 0L)
-        require(image.tick in 0x20000000L..0x2001FFFCL && image.tick % 4 == 0L && image.tick !in image.base until end)
-        require(image.vectorBytes in 268..1024 && image.vectorBytes % 4 == 0)
+        require(image.tick in 0x20000000L..(profile.ramEnd - 4) && image.tick % 4 == 0L && image.tick !in image.base until end)
+        require(image.vectorBytes in ((17 + image.timer.irq) * 4)..1024 && image.vectorBytes % 4 == 0)
         var alignment = 512
         while (alignment < image.vectorBytes) alignment *= 2
         require(image.vectors % alignment == 0L && image.vectors >= image.base && image.vectors + image.vectorBytes <= end)
@@ -34,15 +35,15 @@ class RttInstaller(private val memory: DebugMemory, private val write: TargetWri
             changed = true
             check(write.halt().halted)
             stage = "resources"
-            val observation = RttDoctor.inspectF411(memory, deviceId).first { it.timer == image.timer }
+            val observation = RttDoctor.inspect(memory, profile).first { it.timer == image.timer }
             check(observation.candidate) { "Timer became busy before installation" }
             val vtor = memory.read32(0xE000ED08)
             val source = vtor.toLong() and 0xFFFFFFFFL
             check(source == 0L || (source >= 0x08000000 && source + image.vectorBytes <= 0x08080000) ||
-                (source >= 0x20000000 && source + image.vectorBytes <= 0x20020000)) { "Unknown vector source" }
+                (source >= 0x20000000 && source + image.vectorBytes <= profile.ramEnd)) { "Unknown vector source" }
             check(source + image.vectorBytes <= image.base || source >= end) { "Image overlaps current vectors" }
-            val rcc = memory.read32(0x40023840)
-            recovery = RttTeardown.Plan(image.timer, image.stubStart, image.stubEnd, image.tick, vtor, rcc)
+            val rcc = memory.read32(profile.rccEnable)
+            recovery = RttTeardown.Plan(image.timer, image.stubStart, image.stubEnd, image.tick, vtor, rcc, profile.rccEnable, profile.ramEnd)
             // Copy the current live table; only replace our IRQ, never trust an ELF vector snapshot.
             val vectors = memory.readBlock(source, image.vectorBytes / 4)
             check(vectors.size == image.vectorBytes / 4)
@@ -60,8 +61,8 @@ class RttInstaller(private val memory: DebugMemory, private val write: TargetWri
             }
             stage = "configure"
             val timer = image.timer
-            write.write32(0x40023840, rcc or timer.clockBit)
-            check(memory.read32(0x40023840) and timer.clockBit != 0)
+            write.write32(profile.rccEnable, rcc or timer.clockBit)
+            check(memory.read32(profile.rccEnable) and timer.clockBit != 0)
             write.write32(timer.base, 0); write.write32(timer.base + 0x0C, 0)
             write.write32(timer.base + 0x28, image.prescaler); write.write32(timer.base + 0x2C, image.reload)
             write.write32(timer.base + 0x14, 1); write.write32(timer.base + 0x10, 0)
