@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import io.github.viacheslavmezentsev.hwlivetest.WorkspaceHost
 import io.github.viacheslavmezentsev.hwlivetest.SettingsActivity
+import io.github.viacheslavmezentsev.hwlivetest.ModuleStatusActivity
 import io.github.viacheslavmezentsev.hwlivetest.AboutActivity
 import io.github.viacheslavmezentsev.hwlivetest.JournalActivity
 
@@ -19,7 +20,7 @@ class MenuAction(val title: String, val enabled: Boolean = true, val run: () -> 
 fun AppMenu(actions: List<MenuAction> = emptyList(), navigationEnabled: Boolean = true) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
-    val common = listOf("Настройки" to SettingsActivity::class.java, "Журнал" to JournalActivity::class.java, "О программе" to AboutActivity::class.java)
+    val common = listOf("Модуль ST-Link" to ModuleStatusActivity::class.java, "Настройки" to SettingsActivity::class.java, "Журнал" to JournalActivity::class.java, "О программе" to AboutActivity::class.java)
         .filter { (_, screen) -> context.javaClass != screen &&
             !(screen == JournalActivity::class.java && (context as? WorkspaceHost)?.workspacePage != null) }
         .map { (title, screen) -> MenuAction(title, navigationEnabled) {

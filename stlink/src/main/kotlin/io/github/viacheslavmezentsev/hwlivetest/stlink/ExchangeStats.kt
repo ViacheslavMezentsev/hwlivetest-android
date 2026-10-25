@@ -7,6 +7,12 @@ import java.util.Locale
  * отчёту понять, где теряется время при чтении и записи блоков.
  */
 class ExchangeStats {
+    // ТЗ ST-Link 5.12: накопительные байты не сбрасываются вместе с отчётом операции.
+    data class Totals(val received: Long, val sent: Long)
+    private var totalReceived = 0L
+    private var totalSent = 0L
+    @Synchronized fun totals(): Totals = Totals(totalReceived, totalSent)
+
     private var writes = 0L
     private var writeNs = 0L
     private var writeMaxNs = 0L
@@ -36,6 +42,7 @@ class ExchangeStats {
         writeNs += ns
         writeMaxNs = maxOf(writeMaxNs, ns)
         bytesOut += bytes
+        totalSent += bytes
     }
 
     @Synchronized
@@ -44,6 +51,7 @@ class ExchangeStats {
         readNs += ns
         readMaxNs = maxOf(readMaxNs, ns)
         bytesIn += bytes
+        totalReceived += bytes
     }
 
     @Synchronized

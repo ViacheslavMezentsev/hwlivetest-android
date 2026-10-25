@@ -34,10 +34,10 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.LocalStatusColors
 import io.github.viacheslavmezentsev.hwlivetest.ui.MonoText
 import io.github.viacheslavmezentsev.hwlivetest.ui.SectionCard
 
-/** Подтверждение действия, меняющего цель (ТЗ прошивки, п. 3.1.2). */
+/** Подтверждение действия, меняющего устройство (ТЗ прошивки, п. 3.1.2). */
 data class Confirm(val title: String, val text: String, val action: () -> Unit)
 
-/** Состояние экрана «Цель». Меняется только в главном потоке. */
+/** Состояние экрана «Устройство». Меняется только в главном потоке. */
 class TargetUi : androidx.lifecycle.ViewModel() {
     var nextPage: WorkspacePage? = null
     var nextDirection: Int = 0
@@ -49,14 +49,13 @@ class TargetUi : androidx.lifecycle.ViewModel() {
     var core by mutableStateOf<CoreState?>(null)
     var writeMode by mutableStateOf(false)
     var busy by mutableStateOf(false)
-    var log by mutableStateOf("")
     var confirm by mutableStateOf<Confirm?>(null)
     var askLeave by mutableStateOf(false)
 }
 
 /**
- * Экран «Цель» (docs/roadmap.md, этап 3): подключение, состояние ядра по DHCSR и управление ядром
- * в режиме «Изменение цели» (ТЗ ST-Link 2.0, п. 5.11).
+ * Экран «Устройство» (docs/roadmap.md, этап 3): подключение, состояние ядра по DHCSR и управление ядром
+ * в режиме «Управление» (ТЗ ST-Link 2.0, п. 5.11).
  */
 class TargetActivity : ComponentActivity(), WorkspaceHost {
     override val workspacePage = WorkspacePage.TARGET
@@ -104,7 +103,6 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
         ui.adapter = Session.adapterText
         ui.target = Session.targetText
         ui.writeMode = Session.writeMode
-        ui.log = Session.log.tail(12)
     }
 
     private fun connect() {
@@ -150,7 +148,7 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
         val mcu = Session.target?.let { t -> listOfNotNull(t.shortName, t.flashSizeKb?.let { "Flash $it КБ" }).joinToString(", ") } ?: "не опознан"
         ui.confirm = Confirm(
             title = "$name?",
-            text = "MCU: $mcu.\nАдаптер: ${Session.device?.title ?: "?"}.\nДействие меняет состояние цели.",
+            text = "MCU: $mcu.\nАдаптер: ${Session.device?.title ?: "?"}.\nДействие меняет состояние устройства.",
             action = {
                 Session.userSaid("подтвердил: $name")
                 change(name, op)
@@ -158,18 +156,18 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
         )
     }
 
-    /** Действие, меняющее цель, в потоке ST-Link; результат — в журнал (ТЗ ST-Link 2.0, п. 5.11.9). */
+    /** Действие, меняющее устройство, в потоке ST-Link; результат — в журнал (ТЗ ST-Link 2.0, п. 5.11.9). */
     private fun change(name: String, op: (TargetWrite) -> CoreState?, after: () -> Unit = {}) {
         ui.busy = true
         Session.worker.execute {
             var succeeded = false
             try {
                 val tw = Session.targetWrite()
-                Session.logLine("# изменение цели: $name…")
+                Session.logLine("# управление устройством: $name…")
                 Session.clearTelemetry(name)
                 val state = op(tw) ?: tw.coreState()
                 succeeded = true
-                Session.logLine("# изменение цели: $name → ${state.title}")
+                Session.logLine("# управление устройством: $name → ${state.title}")
                 Session.programSaid("$name: ядро — ${state.title}")
                 runOnUiThread {
                     Session.updateCore(state)
@@ -177,7 +175,7 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
                     ui.error = false
                 }
             } catch (e: Exception) {
-                Session.logLine("# изменение цели: $name — ошибка: ${e.message}")
+                Session.logLine("# управление устройством: $name — ошибка: ${e.message}")
                 Session.programSaid("$name не выполнено: ${ErrorMessages.describe(e)}")
                 runOnUiThread {
                     ui.status = ErrorMessages.describe(e)
@@ -217,9 +215,10 @@ fun TargetScreen(
     onAction: (String, (TargetWrite) -> CoreState?) -> Unit,
     onLeave: (Boolean) -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val debug by Session.debugDetails.collectAsState()
     val status = LocalStatusColors.current
-    HwScreen(title = "Цель", onBack = onBack, navigationEnabled = !ui.busy) {
+    HwScreen(title = "Устройство", onBack = onBack, navigationEnabled = !ui.busy) {
         if (ui.status.isNotEmpty()) {
             Text(ui.status, color = if (ui.error) status.bad else MaterialTheme.colorScheme.onBackground)
         }
@@ -238,16 +237,18 @@ fun TargetScreen(
             core.halted -> status.warn
             else -> status.ok
         }
+        OutlinedButton(onClick = { (context as android.app.Activity).startActivity(android.content.Intent(context, ModuleStatusActivity::class.java)) }, enabled = !ui.busy) { Text("Модуль ST-Link · состояние и трафик") }
+
         SectionCard("Ядро") {
             Text(core?.title ?: "не прочитано", color = coreColor, style = MaterialTheme.typography.titleMedium)
             if (debug && core != null) Text("DHCSR ${core.dhcsr.hex32()}", style = MonoText, color = status.muted)
             OutlinedButton(onClick = onRefresh, enabled = ui.connected && !ui.busy) { Text("Обновить") }
         }
 
-        SectionCard("Изменение цели") {
+        SectionCard("Управление") {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Switch(checked = ui.writeMode, enabled = !ui.busy, onCheckedChange = onWriteMode)
-                Text("Режим «Изменение цели»", style = MaterialTheme.typography.bodyLarge)
+                Text("Доступ", style = MaterialTheme.typography.bodyLarge)
             }
             Text(
                 "Выключен при каждом запуске приложения. Подтверждения команд ядра настраиваются в «Быстрых действиях». " +
@@ -272,7 +273,6 @@ fun TargetScreen(
             )
         }
 
-        InfoCard("Журнал", ui.log.lines().takeLast(12), mono = true)
     }
 
     ui.confirm?.let { c ->

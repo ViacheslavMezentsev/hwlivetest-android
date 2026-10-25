@@ -6,7 +6,7 @@ import android.content.Intent
 
 /** ТЗ прошивки 5.15: страницы одного уровня, цикл не зависит от стека Activity. */
 enum class WorkspacePage(val title: String) {
-    SIGNALS("Сигналы"), TARGET("Цель"), FLASH("Прошивка"), JOURNAL("Журнал");
+    TARGET("Устройство"), FLASH("Прошивка"), SIGNALS("Сигналы"), JOURNAL("Журнал");
     fun next(delta: Int): WorkspacePage = entries[Math.floorMod(ordinal + delta, entries.size)]
 }
 interface WorkspaceHost {

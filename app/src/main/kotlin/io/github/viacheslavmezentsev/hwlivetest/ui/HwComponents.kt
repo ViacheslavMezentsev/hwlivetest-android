@@ -55,6 +55,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.size
+import io.github.viacheslavmezentsev.hwlivetest.R
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -119,7 +123,10 @@ fun HwScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(title, style = MaterialTheme.typography.titleLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(painterResource(R.drawable.ic_hardware), contentDescription = null, modifier = Modifier.size(24.dp))
+                            Text(title, style = MaterialTheme.typography.titleLarge)
+                        }
                         HeaderClock(barContent)
                     }
                 },

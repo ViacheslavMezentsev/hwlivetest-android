@@ -29,13 +29,13 @@ class SettingsActivity : ComponentActivity() {
                     Text("Адреса, регистры, символы ELF, чтение памяти по адресу и подробности обмена.",
                         style = MaterialTheme.typography.bodySmall)
                 }
-                SectionCard("Действия с целью") {
+                SectionCard("Действия с устройством") {
                     SettingSwitch("Быстрые действия", fast, route.ready && Session.writeMode) {
                         if (it) confirmFast = true else Session.setFastActions(false)
                     }
-                    Text("Остановка, запуск и сброс ядра без повторного вопроса. Действует до отключения адаптера, выключения изменения цели или завершения приложения.",
+                    Text("Остановка, запуск и сброс ядра без повторного вопроса. Действует до отключения адаптера, выключения управления устройством или завершения приложения.",
                         style = MaterialTheme.typography.bodySmall)
-                    if (!Session.writeMode) Text("Сначала включите «Изменение цели» на странице «Цель».")
+                    if (!Session.writeMode) Text("Сначала включите «Доступ» в разделе «Управление» на странице «Устройство».")
                     Text("Прошивка, стирание и импульс NRST сохраняют подтверждения.", style = MaterialTheme.typography.bodySmall)
                     SettingSwitch("Резервная копия перед прошивкой", backup) {
                         backup = it; Prefs.setFlashBackup(this@SettingsActivity, it)

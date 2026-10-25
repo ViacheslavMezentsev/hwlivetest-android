@@ -30,6 +30,8 @@ class ExpertUi : androidx.lifecycle.ViewModel() {
     var fields by mutableStateOf(emptyList<Field>())
     var fieldsInfo by mutableStateOf("")
     var readings by mutableStateOf(emptyMap<String, FieldSampler.Reading>())
+    var readAt by mutableStateOf(emptyMap<String, Long>())
+    var polling by mutableStateOf(false)
     var readResult by mutableStateOf("")
 }
 
@@ -109,6 +111,7 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
         if (file !== shownFile) {
             shownFile = file
             ui.readings = emptyMap()
+            ui.readAt = emptyMap()
         }
         ui.fields = file?.fields ?: emptyList()
         ui.fieldsInfo = if (file == null) "Откройте addresses.json или подключите таблицу из ELF на экране «Прошивка»."
@@ -174,6 +177,7 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
     }
 
     private fun stopFieldPolling() {
+        ui.polling = false
         pollGeneration++
         Session.stopPolling()
     }
@@ -182,12 +186,17 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
         stopFieldPolling()
         if (!resumed || Session.stlink == null || Session.sampler == null) return
         val generation = pollGeneration
+        ui.polling = true
         Session.startPolling(500L, only = null,
-            onReadings = { readings -> runOnUiThread {
-                if (resumed && generation == pollGeneration) ui.readings = readings.associateBy { it.spec.topic }
+            onReadings = { readings -> val readTime = android.os.SystemClock.elapsedRealtime(); runOnUiThread {
+                if (resumed && generation == pollGeneration) {
+                    ui.readings = readings.associateBy { it.spec.topic }
+                    val now = readTime
+                    ui.readAt = readings.filter { it.raw != null && it.error == null }.associate { it.spec.topic to now }
+                }
             } },
             onStopped = { message -> runOnUiThread {
-                if (resumed && generation == pollGeneration) ui.fieldsInfo = "Опрос остановлен: " + message
+                if (resumed && generation == pollGeneration) { ui.polling = false; ui.fieldsInfo = "Опрос остановлен: " + message }
             } },
         )
     }

@@ -49,9 +49,11 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
-            android:label="@string/menu_expert"
+            android:label="Сигналы"
             android:parentActivityName=".SimpleActivity"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity android:name=".ModuleStatusActivity" android:exported="false" android:label="Модуль ST-Link" />
 
         <activity android:name=".SettingsActivity" android:exported="false" android:label="Настройки" />
 

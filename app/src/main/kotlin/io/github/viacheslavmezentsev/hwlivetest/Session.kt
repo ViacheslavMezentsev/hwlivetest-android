@@ -50,6 +50,19 @@ object Session {
         notifyChanged()
     }
 
+    private val trafficState = MutableStateFlow(TrafficHistory.Snapshot())
+    val traffic = trafficState.asStateFlow()
+    private val trafficHistory = TrafficHistory()
+    private val trafficMonitor by lazy {
+        Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "traffic-monitor").apply { isDaemon = true } }
+            .scheduleAtFixedRate({
+                val st = stlink
+                val bytes = st?.stats?.totals()
+                trafficState.value = trafficHistory.sample(SystemClock.elapsedRealtime(), st, bytes?.received ?: 0, bytes?.sent ?: 0)
+            }, 0, 1, TimeUnit.SECONDS)
+    }
+    fun beginTrafficMonitoring() { trafficMonitor }
+
     private val routeState = MutableStateFlow(ConnectionState())
     val route = routeState.asStateFlow()
     @Volatile var core: CoreState? = null
@@ -222,11 +235,11 @@ object Session {
         }
     }
 
-    // ---------- Изменение цели (ТЗ ST-Link 2.0, п. 5.11.1; ТЗ прошивки, п. 3.1.1) ----------
+    // ---------- Управление (ТЗ ST-Link 2.0, п. 5.11.1; ТЗ прошивки, п. 3.1.1) ----------
 
     /**
-     * Разрешение на изменение цели. Живёт только в памяти процесса: при каждом запуске
-     * приложения режим «Изменение цели» выключен.
+     * Разрешение на управление устройством. Живёт только в памяти процесса: при каждом запуске
+     * приложения доступ к управлению выключен.
      */
     @Volatile
     var writePermit: WritePermit? = null
@@ -236,15 +249,15 @@ object Session {
 
     fun enableWriteMode() {
         if (writeMode) return
-        writePermit = WritePermit.grant("режим «Изменение цели» включён пользователем")
-        userSaid("включил режим «Изменение цели»")
+        writePermit = WritePermit.grant("доступ к управлению включён пользователем")
+        userSaid("включил доступ к управлению")
         notifyChanged()
     }
 
     fun disableWriteMode() {
         fastActionsState.value = false
         writePermit?.revoke()
-        if (writePermit != null) userSaid("выключил режим «Изменение цели»")
+        if (writePermit != null) userSaid("выключил доступ к управлению")
         writePermit = null
         notifyChanged()
     }
@@ -253,7 +266,7 @@ object Session {
     fun targetWrite(): TargetWrite {
         val st = stlink ?: throw IllegalStateException("Сначала подключитесь к ST-Link.")
         val permit = writePermit
-            ?: throw StLinkException(StLinkErrorKind.NOT_PERMITTED, "Включите режим «Изменение цели».")
+            ?: throw StLinkException(StLinkErrorKind.NOT_PERMITTED, "Включите доступ к управлению.")
         return st.targetWrite(permit)
     }
 

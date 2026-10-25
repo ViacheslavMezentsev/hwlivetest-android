@@ -39,8 +39,8 @@ class ConnectionReuseTest {
     }
 
     @Test fun workspaceWrapsInBothDirections() {
-        assertEquals(WorkspacePage.SIGNALS, WorkspacePage.JOURNAL.next(1))
-        assertEquals(WorkspacePage.JOURNAL, WorkspacePage.SIGNALS.next(-1))
+        assertEquals(WorkspacePage.TARGET, WorkspacePage.JOURNAL.next(1))
+        assertEquals(WorkspacePage.JOURNAL, WorkspacePage.TARGET.next(-1))
         WorkspacePage.entries.forEach { assertEquals(it, it.next(1).next(-1)) }
     }
 }

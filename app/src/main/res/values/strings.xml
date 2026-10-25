@@ -35,7 +35,7 @@
     <string name="tool_backup">Резервная копия Flash</string>
     <string name="tool_check">Сверить с HEX</string>
     <string name="tool_fields">Поля и графики</string>
-    <string name="tool_write_note">Прошивка, стирание, остановка и сброс меняют MCU — доступны в режиме эксперта: меню «Прошивка» и «Цель», режим «Изменение цели».</string>
+    <string name="tool_write_note">Прошивка, стирание, остановка и сброс меняют MCU — доступны в режиме эксперта: меню «Прошивка» и «Устройство», переключатель «Доступ» в разделе «Управление».</string>
     <string name="simple_hint">Подключите ST-Link к телефону и плату к ST-Link, затем нажмите ПУСК: приложение проверит, жив ли MCU, тактируется ли он, работает ли прошивка.</string>
     <string name="record_start">● Запись</string>
     <string name="record_stop">■ Стоп</string>
@@ -45,8 +45,8 @@
     <string name="record_folder_pick">Выберите папку для записей MCAP — она запомнится.</string>
     <string name="record_folder_saved">Папка для записей сохранена</string>
     <string name="fields_dialog_title">Поля (последнее отмеченное — сверху)</string>
-    <string name="menu_target">Цель: управление ядром</string>
-    <string name="target_title">Цель</string>
+    <string name="menu_target">Устройство: управление ядром</string>
+    <string name="target_title">Устройство</string>
     <string name="menu_flash">Прошивка</string>
     <string name="flash_title">Прошивка</string>
     <string name="menu_logic">Логический анализатор</string>

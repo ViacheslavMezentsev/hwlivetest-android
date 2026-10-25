@@ -1,6 +1,10 @@
 package io.github.viacheslavmezentsev.hwlivetest
 
 import android.app.Activity
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,7 +50,7 @@ fun ExpertScreen(
     val listState = rememberLazyListState()
 
     // ТЗ прошивки 5.9.9: навигация не входит в обновляемый список показаний.
-    HwScreen("Режим эксперта", onBack = onBack, scrolling = false, navigationEnabled = !ui.busy, actions = {
+    HwScreen("Сигналы", onBack = onBack, scrolling = false, navigationEnabled = !ui.busy, actions = {
         AppMenu(actions = listOf(
             MenuAction("Простой режим", !ui.busy, onBack),
         ), navigationEnabled = !ui.busy)
@@ -102,7 +106,7 @@ fun ExpertScreen(
                     }
                 }
                 if (!debug || group !in collapsed) items(fields, key = { "field:" + it.topic }) { field ->
-                    SignalCard(field, debug, ui.fields.count { it.shortName == field.shortName } > 1, reading = { ui.readings[field.topic] }, onClick = { onChart(field) })
+                    SignalCard(field, debug, ui.fields.count { it.shortName == field.shortName } > 1, ui.connected && ui.polling, ui.readAt[field.topic], reading = { ui.readings[field.topic] }, onClick = { onChart(field) })
                 }
             }
         }
@@ -121,12 +125,15 @@ private fun CatalogChoice(label: String, choices: List<Pair<String, String>>, on
 }
 
 @Composable
-private fun SignalCard(field: Field, debug: Boolean, duplicateName: Boolean, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
+private fun SignalCard(field: Field, debug: Boolean, duplicateName: Boolean, polling: Boolean, readAt: Long?, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
     val colors = LocalStatusColors.current
     val check = Session.check(field)
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(field.shortName, style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SignalDot(polling, readAt)
+                Text(field.shortName, style = MaterialTheme.typography.titleSmall)
+            }
             val sample = reading()
             val value = sample?.value
             val error = sample?.error
@@ -143,5 +150,18 @@ private fun SignalCard(field: Field, debug: Boolean, duplicateName: Boolean, rea
             if (field.min != null || field.max != null) Text("Границы: ${field.min ?: "…"} … ${field.max ?: "…"}", style = MonoText)
             check.warning?.let { Text(it, color = colors.warn, style = MaterialTheme.typography.bodySmall) }
         }
+    }
+}
+
+@Composable
+private fun SignalDot(polling: Boolean, readAt: Long?) {
+    val now by produceState(android.os.SystemClock.elapsedRealtime(), polling, readAt) {
+        do { value = android.os.SystemClock.elapsedRealtime(); delay(250) } while (polling)
+    }
+    val active = SignalFreshness.active(true, polling, now, readAt)
+    val colors = LocalStatusColors.current
+    val color = if (active) colors.ok else colors.muted
+    Canvas(Modifier.size(10.dp).semantics { contentDescription = if (active) "Сигнал читается" else "Нет свежих показаний" }) {
+        drawCircle(color)
     }
 }

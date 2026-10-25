@@ -29,6 +29,7 @@ class JournalActivity : ComponentActivity(), WorkspaceHost {
     override fun navigateWorkspace(page: WorkspacePage, direction: Int) { if (workspacePage != null && page != workspacePage) WorkspaceNavigation.open(this, page, direction) }
     override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); setIntent(intent); workspace = intent.getBooleanExtra(WorkspaceNavigation.EXTRA_WORKSPACE, false) }
     private fun back() { if (workspacePage == null) finish() else WorkspaceNavigation.home(this) }
+    private var history by mutableStateOf(emptyList<String>())
     private var entries by mutableStateOf(emptyList<SessionLog.Entry>())
     private var logPolling by mutableStateOf(false)
     private val handler = Handler(Looper.getMainLooper())
@@ -39,7 +40,7 @@ class JournalActivity : ComponentActivity(), WorkspaceHost {
         super.onCreate(savedInstanceState)
         workspace = intent.getBooleanExtra(WorkspaceNavigation.EXTRA_WORKSPACE, false)
         setContent { HwTheme {
-            JournalScreen(entries, logPolling, ::back, onCopy = {
+            JournalScreen(entries, logPolling, ::back, history = history, onClearHistory = { FlashHistory.clear(this); history = FlashHistory.lines(this) }, onCopy = {
                 (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(ClipData.newPlainText("HW Live Test log", Session.log.text()))
                 Toast.makeText(this, R.string.log_copied, Toast.LENGTH_SHORT).show()
@@ -52,6 +53,7 @@ class JournalActivity : ComponentActivity(), WorkspaceHost {
     }
     override fun onResume() {
         super.onResume()
+        history = FlashHistory.lines(this)
         logPolling = Session.logPolling
         handler.post(refresh)
     }
@@ -63,9 +65,12 @@ class JournalActivity : ComponentActivity(), WorkspaceHost {
 
 @Composable
 private fun JournalScreen(entries: List<SessionLog.Entry>, polling: Boolean, onBack: () -> Unit,
+    history: List<String>, onClearHistory: () -> Unit,
     onCopy: () -> Unit, onClear: () -> Unit, onPolling: (Boolean) -> Unit,
 ) {
     val debug by Session.debugDetails.collectAsState()
+    var showHistory by rememberSaveable { mutableStateOf(false) }
+    var confirmHistory by rememberSaveable { mutableStateOf(false) }
     var protocol by rememberSaveable { mutableStateOf(false) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     val rows = remember(entries, protocol, debug) { entries.flatMap { entry ->
@@ -75,12 +80,23 @@ private fun JournalScreen(entries: List<SessionLog.Entry>, polling: Boolean, onB
         AppMenu(actions = listOf(MenuAction("Копировать весь журнал", run = onCopy),
             MenuAction("Очистить журнал") { confirmClear = true }))
     }) {
-        if (debug) Row(verticalAlignment = Alignment.CenterVertically) {
+        if (debug && !showHistory) Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = protocol, onCheckedChange = { protocol = it }); Text("Показать обмен USB")
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = polling, onCheckedChange = onPolling); Text("Писать обмен при опросе")
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !showHistory, onClick = { showHistory = false }, label = { Text("Сеанс") })
+            FilterChip(selected = showHistory, onClick = { showHistory = true }, label = { Text("История операций") })
+        }
+        if (showHistory) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(history) { Text(it, style = MonoText) }
+            }
+            if (history.isEmpty()) Text("История пуста.")
+            else TextButton(onClick = { confirmHistory = true }) { Text("Очистить историю") }
+        } else {
         val state = rememberLazyListState()
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = state, reverseLayout = true,
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -99,7 +115,12 @@ private fun JournalScreen(entries: List<SessionLog.Entry>, polling: Boolean, onB
         }
         if (rows.isEmpty()) Text("Журнал пуст.")
         Text("Последние 300 строк. Копирование — весь журнал сеанса.", style = MaterialTheme.typography.bodySmall)
+        }
     }
+    if (confirmHistory) AlertDialog(onDismissRequest = { confirmHistory = false },
+        title = { Text("Очистить историю операций?") }, text = { Text("Резервные копии сохранятся.") },
+        confirmButton = { TextButton(onClick = { onClearHistory(); confirmHistory = false }) { Text("Очистить") } },
+        dismissButton = { TextButton(onClick = { confirmHistory = false }) { Text("Отмена") } })
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
         title = { Text("Очистить журнал?") }, text = { Text("Строки текущего сеанса будут удалены.") },
         confirmButton = { TextButton(onClick = { onClear(); confirmClear = false }) { Text("Очистить") } },

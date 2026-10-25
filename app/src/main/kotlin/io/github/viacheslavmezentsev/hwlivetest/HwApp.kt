@@ -13,6 +13,7 @@ import android.os.Build
 class HwApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        Session.beginTrafficMonitoring()
         Session.debugDetails.value = Prefs.debugDetails(this)
         Session.logPolling = Prefs.logPolling(this)
         val receiver = object : BroadcastReceiver() {
