@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import io.github.viacheslavmezentsev.hwlivetest.stlink.hex32
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.Field
+import io.github.viacheslavmezentsev.hwlivetest.telemetry.FieldCatalog
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.needsOwnScale
 import io.github.viacheslavmezentsev.hwlivetest.ui.*
 
@@ -34,6 +35,11 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
 ) {
     var choosing by rememberSaveable { mutableStateOf(false) }
     var chosen by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var channelQuery by rememberSaveable { mutableStateOf("") }
+    var selectedOnly by rememberSaveable { mutableStateOf(false) }
+    val matching = remember(all, channelQuery, selectedOnly, chosen) {
+        FieldCatalog.filter(all, channelQuery).filter { !selectedOnly || it.topic in chosen }
+    }
     val selected = ui.topics.indexOf(ui.selectedTopic).coerceAtLeast(0)
     ui.now // Автоматическая шкала зависит от последнего отсчёта каждого кадра.
     val own = ui.ownScale ?: (ui.lines.size > 1 && needsOwnScale(ui.lines.mapNotNull { it.series.lastValue() }))
@@ -78,9 +84,18 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
             dismissButton = { TextButton(onClick = { ui.saved = null }) { Text("Закрыть") } },
         )
     }
-    if (choosing) AlertDialog(onDismissRequest = { choosing = false }, title = { Text("Каналы (до 6)") },
-        text = { LazyColumn(Modifier.heightIn(max = 400.dp)) {
-            items(all, key = { it.topic }) { f ->
+    if (choosing) AlertDialog(onDismissRequest = { choosing = false }, title = { Text("Каналы · ${chosen.size}/6") },
+        text = { Column(Modifier.heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(value = channelQuery, onValueChange = { channelQuery = it },
+                label = { Text("Поиск сигнала или топика") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                trailingIcon = { if (channelQuery.isNotEmpty()) TextButton(onClick = { channelQuery = "" }) { Text("Сброс") } })
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = selectedOnly, onClick = { selectedOnly = !selectedOnly }, label = { Text("Выбранные") })
+                Text("Показано ${matching.size} из ${all.size}", style = MaterialTheme.typography.bodySmall)
+            }
+            if (matching.isEmpty()) Text("Нет сигналов по выбранным условиям.")
+            LazyColumn(Modifier.weight(1f, fill = false)) {
+            items(matching, key = { it.topic }) { f ->
                 Row(Modifier.fillMaxWidth().clickable {
                     chosen = if (f.topic in chosen) chosen-f.topic else if (chosen.size < 6) chosen+f.topic else chosen
                 }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -88,6 +103,7 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
                         colors = CheckboxDefaults.colors(checkedColor = chosen.indexOf(f.topic).takeIf { it >= 0 }?.let { Color(ChartSetup.PALETTE[it]) } ?: MaterialTheme.colorScheme.primary))
                     Text(f.topic, modifier = Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyMedium)
                 }
+            }
             }
         } },
         confirmButton = { TextButton(enabled = chosen.isNotEmpty(), onClick = { onTopics(chosen); choosing = false }) { Text("Применить") } },
