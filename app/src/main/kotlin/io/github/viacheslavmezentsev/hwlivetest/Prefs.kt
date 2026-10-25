@@ -7,6 +7,10 @@ object Prefs {
     fun debugDetails(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("debug_details", false)
     fun setDebugDetails(c: Context, v: Boolean) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("debug_details", v).apply()
 
+    // ТЗ прошивки 5.20: ручная проверка SHA выключена по умолчанию.
+    fun useSha(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("use_sha", false)
+    fun setUseSha(c: Context, v: Boolean) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("use_sha", v).apply()
+
     private const val FILE = "hwlivetest"
     private const val EXPERT = "expert_mode"
     private const val LOG_POLLING = "log_polling"

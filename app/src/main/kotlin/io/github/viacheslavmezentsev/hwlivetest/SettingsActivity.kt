@@ -21,6 +21,7 @@ class SettingsActivity : ComponentActivity() {
             val route by Session.route.collectAsState()
             var confirmFast by rememberSaveable { mutableStateOf(false) }
             var backup by rememberSaveable { mutableStateOf(Prefs.flashBackup(this@SettingsActivity)) }
+            var useSha by rememberSaveable { mutableStateOf(Prefs.useSha(this@SettingsActivity)) }
             HwScreen("Настройки", onBack = ::finish) {
                 SectionCard("Отображение") {
                     SettingSwitch("Отладочные сведения", debug) {
@@ -37,6 +38,10 @@ class SettingsActivity : ComponentActivity() {
                         style = MaterialTheme.typography.bodySmall)
                     if (!Session.writeMode) Text("Сначала включите «Доступ» в разделе «Управление» на странице «Устройство».")
                     Text("Прошивка, стирание и импульс NRST сохраняют подтверждения.", style = MaterialTheme.typography.bodySmall)
+                    SettingSwitch("Использовать SHA-256", useSha) {
+                        useSha = it; Prefs.setUseSha(this@SettingsActivity, it)
+                    }
+                    Text("Показывать хеши и проверять файл по введённой контрольной сумме. Сверка записанной прошивки выполняется всегда.", style = MaterialTheme.typography.bodySmall)
                     SettingSwitch("Резервная копия перед прошивкой", backup) {
                         backup = it; Prefs.setFlashBackup(this@SettingsActivity, it)
                     }

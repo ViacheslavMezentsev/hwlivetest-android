@@ -52,7 +52,7 @@ class SimpleActivity : ComponentActivity() {
             onStart = ::onStartPressed,
             onExpert = {
                 Prefs.setExpert(this, true)
-                startActivity(Intent(this, MainActivity::class.java))
+                startActivity(Intent(this, TargetActivity::class.java))
             },
             onFlash = {
                 startActivity(Intent(this, FlashActivity::class.java).putExtra(FlashActivity.EXTRA_READ_ONLY, true))
@@ -60,7 +60,7 @@ class SimpleActivity : ComponentActivity() {
             onCopy = ::copyReport,
         ) } }
         showIdle()
-        if (savedInstanceState == null && Prefs.expert(this)) startActivity(Intent(this, MainActivity::class.java))
+        if (savedInstanceState == null && Prefs.expert(this)) startActivity(Intent(this, TargetActivity::class.java))
     }
 
     override fun onResume() {

@@ -84,6 +84,7 @@ class FlashUi : ViewModel() {
     var backup by mutableStateOf(true)
     var run by mutableStateOf(true)
     var file by mutableStateOf<String?>(null)
+    var useSha by mutableStateOf(false)
     var expectedSha by mutableStateOf("")
     var plan by mutableStateOf<List<String>>(emptyList())
     var planAllowed by mutableStateOf(false)
@@ -112,6 +113,8 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         Session.addListener(sessionChanged)
         sync()
         if (!ui.busy) {
+            ui.useSha = Prefs.useSha(this)
+            if (!ui.useSha) ui.expectedSha = ""
             ui.backup = Prefs.flashBackup(this)
             rebuildPlan()
             if (Session.route.value.ready) readVoltage()
@@ -176,7 +179,6 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
                         writeMode = { on ->
                             if (!ui.readOnly) { if (on) Session.enableWriteMode() else Session.disableWriteMode(); sync() }
                         },
-                        backup = { on -> ui.backup = on; Prefs.setFlashBackup(this, on); rebuildPlan() },
                         run = { on -> ui.run = on },
                         check = { check() },
                         flash = { confirmFlash() },
@@ -290,6 +292,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
     }
 
     /** ТЗ прошивки 5.1: план без обращения к памяти устройства. */
+    // ТЗ прошивки 5.20: выключенный SHA не влияет на разрешение операции.
     private fun rebuildPlan() {
         val segs = segments
         if (segs == null) {
@@ -302,7 +305,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
             segs,
             PlanTarget(devId(), t?.flashSizeKb, voltage, mcu()),
             fileSha256 = fileSha,
-            expectedSha256 = ui.expectedSha.takeIf { it.isNotBlank() },
+            expectedSha256 = ui.expectedSha.takeIf { ui.useSha && it.isNotBlank() },
         )
         plan = p
         ui.plan = buildList {
@@ -328,7 +331,10 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
     private fun confirmText(p: FlashPlan, flash: Boolean): String = buildString {
         appendLine("MCU: ${mcu()}")
         appendLine("Адаптер: ${Session.device?.title ?: "?"}, ${Session.stlink?.version?.label ?: ""}")
-        if (flash) appendLine("Файл: ${ui.file}, $fileBytes байт\nSHA-256: ${fileSha?.take(16)}…")
+        if (flash) {
+            appendLine("Файл: ${ui.file}, $fileBytes байт")
+            if (ui.useSha) appendLine("SHA-256: ${fileSha?.take(16)}…")
+        }
         appendLine("Стереть: ${FlashPlan.unitsText(p.units)}")
         if (p.bytesLost > 0) appendLine("Потеряется вне образа: ${FlashPlan.kb(p.bytesLost)}")
         if (flash) {
@@ -351,8 +357,8 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
 
     private fun confirmEraseUnits() {
         val p = plan ?: return
-        Session.userSaid("нажал «Стереть секторы плана»")
-        ui.confirm = Confirm("Стереть секторы плана?", confirmText(p, false)) {
+        Session.userSaid("нажал «Стереть область выбранного файла»")
+        ui.confirm = Confirm("Стереть область выбранного файла?", confirmText(p, false)) {
             Session.userSaid("подтвердил стирание: ${FlashPlan.unitsText(p.units)}")
             start("стирание") { f, pr -> f.erase(p.units, pr) }
         }
@@ -681,7 +687,6 @@ class FlashActions(
     val backupAll: () -> Unit,
     val expectedSha: (String) -> Unit,
     val writeMode: (Boolean) -> Unit,
-    val backup: (Boolean) -> Unit,
     val run: (Boolean) -> Unit,
     val check: () -> Unit,
     val flash: () -> Unit,
@@ -712,7 +717,7 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
             Text("Ядро продолжает работать. Доступ не требуется.", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = actions.backupAll, enabled = ui.connected && !ui.busy) { Text("Сохранить всю Flash в HEX…") }
             OutlinedButton(onClick = actions.pickFile, enabled = !ui.busy) { Text(if (ui.file == null) "Выбрать HEX или ELF…" else "Другой файл…") }
-            OutlinedTextField(
+            if (ui.useSha) OutlinedTextField(
                 value = ui.expectedSha,
                 onValueChange = actions.expectedSha,
                 label = { Text("Ожидаемый SHA-256 (необязательно)") },
@@ -722,7 +727,7 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
             )
             if (ui.plan.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    for (line in ui.plan) {
+                    for (line in ui.plan.filter { ui.useSha || !it.startsWith("SHA-256") }) {
                         val bad = line.startsWith("Отказ") || line.startsWith("Внимание")
                         Text(line, style = MonoText, color = if (bad) status.bad else MaterialTheme.colorScheme.onSurface)
                     }
@@ -732,18 +737,18 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
         }
 
         if (!ui.readOnly) SectionCard("Управление") {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Доступ", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                 Switch(checked = ui.writeMode, onCheckedChange = actions.writeMode, enabled = !ui.busy)
-                Text("Доступ", style = MaterialTheme.typography.bodyLarge)
             }
-            CheckRow("Резервная копия перед прошивкой", ui.backup, actions.backup)
             CheckRow("Запустить после прошивки", ui.run, actions.run)
             val enabled = ui.connected && ui.writeMode && !ui.busy
             Button(onClick = actions.flash, enabled = enabled && ui.planAllowed, modifier = Modifier.fillMaxWidth()) { Text("Прошить") }
             ButtonRow(
-                "Стереть секторы плана" to actions.eraseUnits,
+                "Стереть область выбранного файла…" to actions.eraseUnits,
                 enabled = enabled && ui.planAllowed && ui.hasUnits,
             )
+            Text("Отдельное стирание без записи. Удаляет целиком сектора, занятые выбранным файлом, включая данные вне его границ. При прошивке нужные сектора стираются автоматически.", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = actions.massErase, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("Полное стирание…") }
         }
 
@@ -756,7 +761,7 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
         }
 
         ui.result?.let { r ->
-            InfoCard("Результат", r.lines(), mono = true, accent = if (ui.resultOk) status.ok else status.bad)
+            InfoCard("Результат", r.lines().filter { ui.useSha || !it.startsWith("SHA-256") }, mono = true, accent = if (ui.resultOk) status.ok else status.bad)
             if (ui.report != null) OutlinedButton(onClick = actions.share) { Text("Отправить отчёт") }
         }
 

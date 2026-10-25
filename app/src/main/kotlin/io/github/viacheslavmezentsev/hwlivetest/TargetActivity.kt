@@ -246,9 +246,9 @@ fun TargetScreen(
         }
 
         SectionCard("Управление") {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Доступ", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                 Switch(checked = ui.writeMode, enabled = !ui.busy, onCheckedChange = onWriteMode)
-                Text("Доступ", style = MaterialTheme.typography.bodyLarge)
             }
             Text(
                 "Выключен при каждом запуске приложения. Подтверждения команд ядра настраиваются в «Быстрых действиях». " +

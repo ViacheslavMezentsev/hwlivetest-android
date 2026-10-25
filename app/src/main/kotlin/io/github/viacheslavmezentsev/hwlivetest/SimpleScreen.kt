@@ -40,7 +40,7 @@ fun SimpleScreen(ui: SimpleUi, onStart: () -> Unit, onExpert: () -> Unit, onFlas
         OutlinedButton(onClick = onFlash, enabled = !ui.running, modifier = Modifier.fillMaxWidth()) {
             Text("Прошивка: резервная копия и сверка")
         }
-        OutlinedButton(onClick = onExpert, enabled = !ui.running, modifier = Modifier.fillMaxWidth()) { Text("Сигналы · режим эксперта") }
+        OutlinedButton(onClick = onExpert, enabled = !ui.running, modifier = Modifier.fillMaxWidth()) { Text("Режим эксперта") }
         report?.let {
             Text(it.summary, style = MaterialTheme.typography.titleMedium)
             if (ui.running) Text("Предыдущий отчёт; проверка выполняется.", color = colors.muted)

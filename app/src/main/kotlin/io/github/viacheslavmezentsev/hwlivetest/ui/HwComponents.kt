@@ -151,7 +151,9 @@ fun HwScreen(
                 WorkspacePage.entries.forEach { tab ->
                     Tab(selected = tab == page, enabled = navigationEnabled,
                         onClick = { host.navigateWorkspace(tab) },
-                        text = { Text(tab.title, fontSize = 12.sp, maxLines = 1) })
+                        content = { Text(tab.title, fontSize = 12.sp, maxLines = 2,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)) })
                 }
             }
         },
