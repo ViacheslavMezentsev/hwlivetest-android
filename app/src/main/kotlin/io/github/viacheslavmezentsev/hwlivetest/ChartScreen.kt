@@ -84,7 +84,8 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
                 Row(Modifier.fillMaxWidth().clickable {
                     chosen = if (f.topic in chosen) chosen-f.topic else if (chosen.size < 6) chosen+f.topic else chosen
                 }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = f.topic in chosen, enabled = f.topic in chosen || chosen.size < 6, onCheckedChange = null)
+                    Checkbox(checked = f.topic in chosen, enabled = f.topic in chosen || chosen.size < 6, onCheckedChange = null,
+                        colors = CheckboxDefaults.colors(checkedColor = chosen.indexOf(f.topic).takeIf { it >= 0 }?.let { Color(ChartSetup.PALETTE[it]) } ?: MaterialTheme.colorScheme.primary))
                     Text(f.topic, modifier = Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyMedium)
                 }
             }

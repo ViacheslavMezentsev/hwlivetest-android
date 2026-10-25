@@ -115,7 +115,7 @@ fun ExpertScreen(
                 }
                 if (!debug || group !in collapsed) items(fields, key = { "field:" + it.topic }) { field ->
                     SignalCard(field, debug, ChartSetup.label(field, ui.fields), ui.connected && ui.polling, ui.readAt[field.topic],
-                        selected = field.topic in selected, selectable = field.topic in selected || selected.size < 6,
+                        selectedIndex = selected.indexOf(field.topic), selectable = field.topic in selected || selected.size < 6,
                         onSelect = { selectedTopics = if (field.topic in selected) selected-field.topic else (selected+field.topic).take(6) },
                         reading = { ui.readings[field.topic] }, onClick = { onChart(field) })
                 }
@@ -136,16 +136,23 @@ private fun CatalogChoice(label: String, choices: List<Pair<String, String>>, on
 }
 
 @Composable
-private fun SignalCard(field: Field, debug: Boolean, label: String, polling: Boolean, readAt: Long?, selected: Boolean, selectable: Boolean, onSelect: () -> Unit, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
+private fun SignalCard(field: Field, debug: Boolean, label: String, polling: Boolean, readAt: Long?, selectedIndex: Int, selectable: Boolean, onSelect: () -> Unit, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
     val colors = LocalStatusColors.current
     val check = Session.check(field)
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val sample = reading()
+            // ТЗ прошивки 5.22: новое показание не сравнивается со старым кадром таймера.
+            val tick by produceState(android.os.SystemClock.elapsedRealtime()) {
+                while (true) { value = android.os.SystemClock.elapsedRealtime(); delay(250) }
+            }
+            val now = maxOf(tick, android.os.SystemClock.elapsedRealtime())
+            val active = sample?.error == null && SignalFreshness.active(true, polling, now, readAt)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SignalDot(polling && sample?.error == null, readAt)
+                SignalDot(active)
                 Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                Checkbox(checked = selected, enabled = selectable, onCheckedChange = { onSelect() })
+                Checkbox(checked = selectedIndex >= 0, enabled = selectable, onCheckedChange = { onSelect() },
+                    colors = CheckboxDefaults.colors(checkedColor = if (selectedIndex >= 0) androidx.compose.ui.graphics.Color(ChartSetup.PALETTE[selectedIndex]) else MaterialTheme.colorScheme.primary))
             }
             val value = sample?.value
             val error = sample?.error
@@ -155,6 +162,13 @@ private fun SignalCard(field: Field, debug: Boolean, label: String, polling: Boo
                 else -> "—"
             }, style = MaterialTheme.typography.titleLarge, minLines = 1, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 color = if (error != null || sample?.outOfRange == true) colors.bad else MaterialTheme.colorScheme.onSurface)
+            // Статус занимает постоянную строку и не сдвигает имя или значение.
+            Text(when {
+                error != null -> "Ошибка чтения"
+                active -> "Читается"
+                readAt != null -> "Нет новых данных ${((now - readAt) / 1000).coerceAtLeast(0)} с"
+                else -> "Ожидание данных"
+            }, style = MaterialTheme.typography.labelSmall, minLines = 1, maxLines = 1, color = colors.muted)
             if (debug) Text(field.topic, style = MonoText, color = colors.muted)
             if (debug) Text(field.address.hex32() + " · " + field.typeLabel + (field.sizeBits?.let { " · $it бит" } ?: ""), style = MonoText)
             if (debug) field.expr?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -166,14 +180,9 @@ private fun SignalCard(field: Field, debug: Boolean, label: String, polling: Boo
 }
 
 @Composable
-private fun SignalDot(polling: Boolean, readAt: Long?) {
-    val now by produceState(android.os.SystemClock.elapsedRealtime(), polling, readAt) {
-        do { value = android.os.SystemClock.elapsedRealtime(); delay(250) } while (true)
-    }
-    val active = SignalFreshness.active(true, polling, now, readAt)
+private fun SignalDot(active: Boolean) {
     val colors = LocalStatusColors.current
     val color = if (active) colors.ok else colors.muted
-    if (!active && readAt != null) Text("Нет данных ${((now - readAt) / 1000).coerceAtLeast(0)} с", style = MaterialTheme.typography.labelSmall, color = colors.muted)
     Canvas(Modifier.size(10.dp).semantics { contentDescription = if (active) "Сигнал читается" else "Нет свежих показаний" }) {
         drawCircle(color)
     }

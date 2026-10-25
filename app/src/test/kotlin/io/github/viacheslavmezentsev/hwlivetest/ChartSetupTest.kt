@@ -8,16 +8,21 @@ import org.junit.Test
 class ChartSetupTest {
     private fun field(topic: String, address: Long = 0x20000000) = Field(topic, FieldKind.FLOAT32, address)
 
+    @Test fun colorsFollowCheckOrderRatherThanTopicNames() {
+        val selected = listOf("/sensor/z", "/raw/a", "/sensor/b")
+        assertEquals(mapOf("/sensor/z" to 0, "/raw/a" to 1, "/sensor/b" to 2), ChartSetup.colors(selected))
+        assertEquals(0xFF005FAF.toInt(), ChartSetup.PALETTE[0])
+        assertEquals(0xFFAF0000.toInt(), ChartSetup.PALETTE[1])
+        assertEquals(0xFF00875F.toInt(), ChartSetup.PALETTE[2])
+    }
 
-    @Test fun paletteCollisionsDoNotGiveSelectedChannelsTheSameColor() {
-        val all = (0..12).map { field("/signal/$it") }
-        val topics = listOf("/signal/0", "/signal/6", "/signal/12")
-        val first = ChartSetup.colors(topics, all, emptyMap(), 6)
-        assertEquals(3, first.values.toSet().size)
-        assertEquals(first, ChartSetup.colors(topics.reversed(), all, first, 6))
-        val added = ChartSetup.colors(topics + "/signal/3", all, first, 6)
-        first.forEach { (topic, color) -> assertEquals(color, added[topic]) }
-        assertEquals(4, added.values.toSet().size)
+    @Test fun recheckingAppendsChannelAndRestoredOrderKeepsColors() {
+        val selected = listOf("/z", "/a", "/b")
+        val rechecked = selected.filter { it != "/a" } + "/a"
+        assertEquals(mapOf("/z" to 0, "/b" to 1, "/a" to 2), ChartSetup.colors(rechecked))
+        val restored = ChartSetup.topics(rechecked, rechecked.map { field(it) }, "/z")
+        assertEquals(ChartSetup.colors(rechecked), ChartSetup.colors(restored))
+        assertEquals((0..5).toList(), ChartSetup.colors((0..5).map { "/$it" }).values.toList())
     }
 
     @Test fun tableIdentityIgnoresOrderingButChangesWithMemoryLayout() {
@@ -34,10 +39,9 @@ class ChartSetupTest {
         assertEquals(6, ChartSetup.topics(fields.map { it.topic }, fields, null).size)
     }
 
-    @Test fun duplicateNamesAndColorsRemainDistinctWhenChannelSelectionChanges() {
+    @Test fun duplicateNamesRemainDistinct() {
         val fields = listOf(field("/sensor/v"), field("/raw/v"), field("/sensor/t"))
         assertNotEquals(ChartSetup.label(fields[0], fields), ChartSetup.label(fields[1], fields))
-        assertEquals(ChartSetup.colorIndex("/sensor/v", fields), ChartSetup.colorIndex("/sensor/v", fields.reversed()))
         assertEquals("t", ChartSetup.label(fields[2], fields))
     }
 }

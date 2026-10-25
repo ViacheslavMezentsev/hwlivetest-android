@@ -35,7 +35,6 @@ class ChartUi : ViewModel() {
     var connecting by mutableStateOf(false)
     var connected by mutableStateOf(false)
     var setupKey = ""
-    var colors = emptyMap<String, Int>()
     var afterFolder: String? = null
     var saved by mutableStateOf<SavedRecording?>(null)
 }
@@ -82,7 +81,6 @@ class ChartActivity : ComponentActivity() {
             ui.ownScale = if (savedInstanceState != null) savedInstanceState.getString("scale")?.toBooleanStrictOrNull() else scale
         }
         if (ui.topics.isEmpty()) { finish(); return }
-        if (ui.colors.isEmpty()) ui.colors = Prefs.chartColors(this, ui.setupKey, ui.topics)
         applyTopics()
         setContent { HwTheme { ChartScreen(ui, fields(), Session.fieldsFile?.fields.orEmpty(),
             onBack = ::finish,
@@ -131,7 +129,6 @@ class ChartActivity : ComponentActivity() {
         handler.removeCallbacks(redraw)
         Session.removeListener(onSessionChanged)
         Prefs.saveChart(this, ui.setupKey, ui.topics, ui.windowMs, ui.ownScale)
-        Prefs.saveChartColors(this, ui.setupKey, ui.colors)
         Session.stopPolling()
         super.onPause()
     }
@@ -146,9 +143,9 @@ class ChartActivity : ComponentActivity() {
 
     private fun applyTopics() {
         val fs = fields()
-        ui.colors = ChartSetup.colors(fs.map { it.topic }, Session.fieldsFile?.fields.orEmpty(), ui.colors, ChartRenderer.PALETTE.size)
+        val colors = ChartSetup.colors(fs.map { it.topic })
         ui.lines = fs.mapNotNull { f -> Session.sampler?.series(f.topic)?.let {
-            ChartRenderer.Line(ChartSetup.label(f, fs), it, ChartRenderer.PALETTE[ui.colors.getValue(f.topic)], f::format)
+            ChartRenderer.Line(ChartSetup.label(f, fs), it, ChartRenderer.PALETTE[colors.getValue(f.topic)], f::format)
         } }
         if (ui.selectedTopic !in ui.topics) ui.selectedTopic = ui.topics.firstOrNull()
         refresh()

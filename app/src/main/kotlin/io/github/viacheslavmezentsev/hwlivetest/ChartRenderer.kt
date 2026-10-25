@@ -260,10 +260,7 @@ class ChartRenderer(private val density: Float) {
     companion object {
         const val GAP_MS = 1_000L
 
-        /** Цвета рядов: различимы на белом и для дальтоников (Okabe–Ito). */
-        val PALETTE = intArrayOf(
-            Color.rgb(0x1F, 0x6F, 0xEB), Color.rgb(0xD5, 0x5E, 0x00), Color.rgb(0x00, 0x9E, 0x73),
-            Color.rgb(0xCC, 0x79, 0xA7), Color.rgb(0xE6, 0x9F, 0x00), Color.rgb(0x56, 0xB4, 0xE9),
-        )
+        /** ТЗ прошивки 5.22: цвета из образца владельца, в порядке выбора каналов. */
+        val PALETTE = ChartSetup.PALETTE
     }
 }

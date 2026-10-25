@@ -26,16 +26,14 @@ object ChartSetup {
         else field.shortName
 
 
-    fun colors(topics: List<String>, all: List<Field>, previous: Map<String, Int>, size: Int): Map<String, Int> {
-        val result = linkedMapOf<String, Int>()
-        for (topic in topics) previous[topic]?.takeIf { it in 0 until size && it !in result.values }?.let { result[topic] = it }
-        for (topic in topics.sorted()) if (topic !in result) {
-            val preferred = colorIndex(topic, all) % size
-            result[topic] = (0 until size).map { (preferred + it) % size }.first { it !in result.values }
-        }
-        return result
-    }
+    // ТЗ прошивки 5.22: палитра владельца, красный второй; порядок — порядок отметок.
+    val PALETTE = intArrayOf(
+        0xFF005FAF.toInt(), 0xFFAF0000.toInt(), 0xFF00875F.toInt(), 0xFFAF8700.toInt(),
+        0xFF875FAF.toInt(), 0xFF008787.toInt(), 0xFFAF005F.toInt(), 0xFF5F8700.toInt(),
+        0xFFD75F5F.toInt(), 0xFF00AFFF.toInt(), 0xFF00AF5F.toInt(), 0xFFAF5F00.toInt(),
+        0xFFAF5FFF.toInt(), 0xFF5F5F87.toInt(), 0xFF875F00.toInt(), 0xFFD75FAF.toInt(),
+    )
 
-    fun colorIndex(topic: String, all: List<Field>): Int =
-        all.map { it.topic }.sorted().indexOf(topic).coerceAtLeast(0)
+    fun colors(topics: List<String>): Map<String, Int> =
+        topics.distinct().take(PALETTE.size).withIndex().associate { it.value to it.index }
 }

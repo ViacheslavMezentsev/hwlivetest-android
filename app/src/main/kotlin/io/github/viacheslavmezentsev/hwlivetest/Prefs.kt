@@ -28,17 +28,6 @@ object Prefs {
             .putString("chart_scale_$key", scale?.toString()).apply()
     }
 
-    fun chartColors(c: Context, key: String, topics: List<String>): Map<String, Int> {
-        val p = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-        return topics.associateWith { p.getInt("chart_color_${key}_$it", -1) }
-    }
-
-    fun saveChartColors(c: Context, key: String, colors: Map<String, Int>) {
-        val editor = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
-        colors.forEach { (topic, color) -> editor.putInt("chart_color_${key}_$topic", color) }
-        editor.apply()
-    }
-
     fun firmwareUri(c: Context): String? = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("firmware_uri", null)
     fun setFirmwareUri(c: Context, uri: String?) {
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString("firmware_uri", uri).apply()
