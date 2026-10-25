@@ -36,7 +36,7 @@ class RttDoctorActivity : ComponentActivity() {
                 val raw = java.io.File(report.parentFile, report.nameWithoutExtension + ".rtt.bin")
                 contentResolver.openOutputStream(uri)!!.use { output ->
                     java.util.zip.ZipOutputStream(output).use { zip ->
-                        listOf(report, raw).filter { it.isFile }.forEach { file ->
+                        listOf(report, raw, java.io.File(report.parentFile, report.nameWithoutExtension + ".mcap")).filter { it.isFile }.forEach { file ->
                             zip.putNextEntry(java.util.zip.ZipEntry(file.name))
                             file.inputStream().use { it.copyTo(zip) }
                             zip.closeEntry()
@@ -152,7 +152,7 @@ class RttDoctorActivity : ComponentActivity() {
                     if (!trialRunning && RttTrial.lastReport != null) OutlinedButton(onClick = {
                         saveTrial.launch("rtt-trial.zip")
                     }) { Text("Сохранить отчёт и поток…") }
-                    Text("Диагностический поток .rtt.bin и отчёт .json сохраняются в папке rtt файлов приложения. Это ещё не MCAP.", style = MaterialTheme.typography.bodySmall)
+                    Text("Диагностический поток .rtt.bin и отчёт .json сохраняются в папке rtt файлов приложения. После снятия заглушки также создаётся MCAP с полями и исходными seq/tick; все файлы входят в ZIP.", style = MaterialTheme.typography.bodySmall)
                 }
                 if (busy) LinearProgressIndicator()
             }

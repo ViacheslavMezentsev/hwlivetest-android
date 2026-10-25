@@ -17,7 +17,7 @@ class RttTrial {
 
     fun run(elf: ElfFile, fields: List<Field>, directory: File): String {
         val report = JSONObject().put("version", BuildConfig.VERSION_NAME).put("sample_hz", 100)
-            .put("fields", JSONArray(fields.map { JSONObject().put("topic", it.topic).put("address", it.address) }))
+            .put("fields", JSONArray(fields.map { JSONObject().put("topic", it.topic).put("address", it.address).put("kind", it.kind.key) }))
         var reportFile: File? = null
         var message: String
         try {
@@ -55,6 +55,7 @@ class RttTrial {
             reportFile.writeText(report.toString(2))
             val decoder = RttFrameDecoder(fields.size)
             var firstTick: Long? = null
+            var firstFrameWallMs: Long? = null
             var lastTick: Long? = null
             val session = RttSession.forDevice(adapter, write, built.image, 0x431,
                 built.control, built.buffer, built.bufferBytes)
@@ -65,7 +66,7 @@ class RttTrial {
                 override fun accept(bytes: ByteArray) {
                     output.write(bytes)
                     decoder.feed(bytes).forEach { frame ->
-                        if (firstTick == null) firstTick = frame.tickMs
+                        if (firstTick == null) { firstTick = frame.tickMs; firstFrameWallMs = System.currentTimeMillis() }
                         lastTick = frame.tickMs
                     }
                 }
@@ -92,6 +93,26 @@ class RttTrial {
                 (if (result.recovery?.ok == true) "подтверждено" else "НЕ подтверждено; проверьте устройство") +
                 listOfNotNull(result.error, result.recovery?.error, result.closeError).joinToString("\n", prefix = "\n")
             if (result.recovery?.ok != true && result.installStage != null) Session.disableWriteMode()
+            // Disk conversion happens only after mandatory target recovery has returned.
+            if (firstFrameWallMs != null) {
+                val partial = File(directory, "$stem.mcap.part")
+                try {
+                    val converted = File(directory, "$stem.rtt.bin").inputStream().use { input ->
+                        partial.outputStream().buffered().use { output ->
+                            io.github.viacheslavmezentsev.hwlivetest.recorder.RttMcap.convert(input, output, fields, firstFrameWallMs!!)
+                        }
+                    }
+                    check(partial.renameTo(File(directory, "$stem.mcap"))) { "Не удалось завершить файл MCAP" }
+                    report.put("mcap_messages", converted.messages).put("mcap_frames", converted.frames)
+                        .put("mcap_pending_bytes", converted.pendingBytes).put("first_frame_wall_ms", firstFrameWallMs)
+                        .put("mcap_time_basis", "first host receipt + MCU tick deltas; approximate epoch")
+                    message += "\nMCAP: ${converted.messages} сообщений."
+                } catch (error: Exception) {
+                    report.put("mcap_error", error.message ?: error.javaClass.simpleName)
+                    message += "\nОшибка MCAP (исходный поток сохранён): ${error.message}"
+                }
+            }
+
         } catch (error: Exception) {
             message = "Проба не завершена: ${error.message}"
             report.put("error", error.message ?: error.javaClass.simpleName)

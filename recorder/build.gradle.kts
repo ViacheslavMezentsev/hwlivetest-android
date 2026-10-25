@@ -16,5 +16,6 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":telemetry"))
     testImplementation(libs.junit)
 }
