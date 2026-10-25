@@ -50,6 +50,9 @@ data class CoreState(val dhcsr: Int) {
  * (ТЗ прошивки, п. 5.5.4).
  */
 interface TargetWrite {
+    /** Experimental RTT teardown only; implementations must reject unsupported operations. */
+    fun readProgramCounter(): Long = throw UnsupportedOperationException("Чтение PC не поддерживается")
+    fun step(): CoreState = throw UnsupportedOperationException("Шаг ядра не поддерживается")
     fun write32(address: Long, value: Int)
     fun writeBlock32(address: Long, words: IntArray)
     fun writeBlock16(address: Long, halves: ShortArray)
@@ -86,6 +89,33 @@ internal class StLinkTargetWrite(
     private val permit: WritePermit,
     private val sleep: (Long) -> Unit,
 ) : TargetWrite {
+
+    // ТЗ RTT 2.5: DCRSR transfer changes debug state, therefore requires WritePermit.
+    override fun readProgramCounter(): Long {
+        check()
+        require(coreState().halted) { "Для чтения PC ядро должно быть остановлено" }
+        write32(0xE000EDF4, 15)
+        waitFor("чтения PC") { it.halted && it.dhcsr and (1 shl 16) != 0 }
+        return st.read32(0xE000EDF8).toLong() and 0xFFFFFFFFL
+    }
+
+    // ТЗ RTT 2.5: mask interrupts while halted, step, wait for halt, restore masking.
+    override fun step(): CoreState {
+        check()
+        val before = coreState()
+        require(before.halted && !before.lockup) { "Шаг допустим только при остановленном ядре без lockup" }
+        val mask = before.dhcsr and 8
+        try {
+            write32(CortexDebugRegs.DHCSR, 0xA05F000B.toInt())
+            write32(CortexDebugRegs.DHCSR, 0xA05F000D.toInt())
+            val after = waitFor("остановки после шага") { it.halted }
+            check(!after.lockup) { "Lockup после шага" }
+        } finally {
+            // On timeout, explicitly halt; never leave C_STEP set or resume implicitly.
+            write32(CortexDebugRegs.DHCSR, 0xA05F0003.toInt() or mask)
+        }
+        return waitFor("остановки после шага") { it.halted }
+    }
 
     private fun check() {
         if (!permit.active) {

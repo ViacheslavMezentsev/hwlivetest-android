@@ -17,6 +17,10 @@ class SimTarget(
     var demcr = 0
     var resetCount = 0
     var nrstPulses = 0
+    var pc = 0x20001000
+    var registerReady = true
+    var stepWorks = true
+    var maskInterrupts = false
     private var resetFlag = false
     private var pendingWrite: Pair<Long, Int>? = null
     private val responses = ArrayDeque<ByteArray>()
@@ -34,6 +38,8 @@ class SimTarget(
             var v = 0
             if (debugEnabled) v = v or CoreState.C_DEBUGEN
             if (halted) v = v or CoreState.S_HALT
+            if (registerReady) v = v or (1 shl 16)
+            if (maskInterrupts) v = v or 8
             if (resetFlag) v = v or CoreState.S_RESET_ST
             resetFlag = false
             v
@@ -47,7 +53,10 @@ class SimTarget(
             CortexDebugRegs.DHCSR -> if (value ushr 16 == 0xA05F) {
                 debugEnabled = value and 1 != 0
                 halted = debugEnabled && value and 2 != 0
+                maskInterrupts = value and 8 != 0
+                if (value and 4 != 0 && stepWorks) { pc += 2; halted = true }
             }
+            0xE000EDF4L -> if (value == 15) putWord(0xE000EDF8, pc)
             CortexDebugRegs.DEMCR -> demcr = value
             CortexDebugRegs.AIRCR -> if (value == CortexDebugRegs.AIRCR_SYSRESETREQ) {
                 resetCount++

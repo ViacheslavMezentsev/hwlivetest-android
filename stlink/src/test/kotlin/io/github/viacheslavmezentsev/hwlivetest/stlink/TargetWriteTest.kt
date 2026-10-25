@@ -8,6 +8,31 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 class TargetWriteTest {
+    @Test fun stepAndReadPcPreserveMask() {
+        val (sim, _, tw) = setup()
+        tw.halt()
+        assertEquals(0x20001000L, tw.readProgramCounter())
+        assertTrue(tw.step().halted)
+        assertEquals(0x20001002L, tw.readProgramCounter())
+        assertFalse(sim.maskInterrupts)
+        sim.maskInterrupts = true
+        tw.step()
+        assertTrue(sim.maskInterrupts)
+    }
+    @Test fun stepTimeoutLeavesCoreHalted() {
+        val (sim, _, tw) = setup()
+        tw.halt(); sim.stepWorks = false
+        try { tw.step(); fail() } catch (_: StLinkException) { }
+        assertTrue(sim.halted)
+        assertFalse(sim.maskInterrupts)
+        assertEquals(0, sim.resetCount)
+    }
+    @Test fun pcTransferTimeout() {
+        val (sim, _, tw) = setup()
+        tw.halt(); sim.registerReady = false
+        try { tw.readProgramCounter(); fail() } catch (_: StLinkException) { }
+        assertTrue(sim.halted)
+    }
     private fun padded(hex: String): ByteArray {
         val b = hex.split(" ").map { it.toInt(16).toByte() }
         return ByteArray(16).also { b.toByteArray().copyInto(it) }
@@ -47,7 +72,7 @@ class TargetWriteTest {
         val permit = WritePermit.grant("тест")
         val tw = st.targetWrite(permit)
         permit.revoke()
-        for (action in listOf<() -> Unit>({ tw.halt() }, { tw.write32(0x20000000L, 1) }, { tw.writeBytes(0x20000000L, byteArrayOf(1)) }, { tw.pulseNrst() })) {
+        for (action in listOf<() -> Unit>({ tw.halt() }, { tw.write32(0x20000000L, 1) }, { tw.writeBytes(0x20000000L, byteArrayOf(1)) }, { tw.pulseNrst() }, { tw.step() }, { tw.readProgramCounter() })) {
             try {
                 action()
                 fail()
