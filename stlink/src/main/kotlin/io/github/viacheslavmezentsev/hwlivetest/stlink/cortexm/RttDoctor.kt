@@ -2,6 +2,15 @@ package io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm
 
 /** ТЗ RTT 2.3. Register layout: stm32-diag-record 1.8.0 boards.toml, revision 376225b. */
 object RttDoctor {
+    // ТЗ RTT 2.4; STM32F411 RM0383 6.3.21, TIMPRE (not the F469 rule).
+    fun timerClockHz(hclk: Long, cfgr: Int, dckcfgr: Int): Long {
+        require(hclk in 1_000_000L..100_000_000L) { "Недостоверный SystemCoreClock" }
+        val ppre = (cfgr ushr 10) and 7
+        val div = if (ppre < 4) 1 else 1 shl (ppre - 3)
+        return if (dckcfgr and (1 shl 24) == 0) {
+            if (div == 1) hclk else hclk * 2 / div
+        } else if (div <= 2) hclk else hclk * 4 / div
+    }
     data class Timer(val name: String, val base: Long, val irq: Int, val clockBit: Int)
     data class Observation(val timer: Timer, val clockEnabled: Boolean, val cr1: Int,
         val dier: Int, val enabled: Boolean, val pending: Boolean, val active: Boolean) {

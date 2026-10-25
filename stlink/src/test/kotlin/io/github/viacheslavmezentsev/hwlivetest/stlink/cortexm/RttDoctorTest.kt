@@ -4,6 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RttDoctorTest {
+    @Test fun f411TimerPrescalers() {
+        val expected = listOf(100L, 100L, 50L, 25L, 12L)
+        listOf(0, 4, 5, 6, 7).forEachIndexed { i, ppre ->
+            val hz = RttDoctor.timerClockHz(100_000_000, ppre shl 10, 0)
+            if (i == 4) assertEquals(12_500_000L, hz) else assertEquals(expected[i] * 1_000_000, hz)
+        }
+        assertEquals(100_000_000L, RttDoctor.timerClockHz(100_000_000, 5 shl 10, 1 shl 24))
+        assertEquals(50_000_000L, RttDoctor.timerClockHz(100_000_000, 6 shl 10, 1 shl 24))
+        assertEquals(25_000_000L, RttDoctor.timerClockHz(100_000_000, 7 shl 10, 1 shl 24))
+    }
+    @Test(expected = IllegalArgumentException::class) fun rejectsUninitializedClock() {
+        RttDoctor.timerClockHz(0, 0, 0)
+    }
     @Test fun readsOnlyExplicitRegistersAndHandlesSecondNvicBank() {
         val reads = mutableListOf<Long>()
         val memory = object : DebugMemory {

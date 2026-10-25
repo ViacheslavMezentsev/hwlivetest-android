@@ -8,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import io.github.viacheslavmezentsev.hwlivetest.firmware.ElfFile
 import io.github.viacheslavmezentsev.hwlivetest.firmware.RttElfAdvice
+import io.github.viacheslavmezentsev.hwlivetest.firmware.RttElfSymbols
+import io.github.viacheslavmezentsev.hwlivetest.firmware.RttReferenceLayout
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.McuVendor
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.RttDoctor
 import io.github.viacheslavmezentsev.hwlivetest.ui.*
@@ -18,9 +20,13 @@ class RttDoctorActivity : ComponentActivity() {
     private var memory by mutableStateOf("")
     private var timers by mutableStateOf("")
     private var observedAdapter: Any? = null
+    @Volatile private var symbols: RttElfSymbols.Symbols? = null
+    private var timing by mutableStateOf("")
     private val openElf = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) {
             busy = true
+            symbols = null
+            timing = ""
             Session.userSaid("выбрал ELF для подготовки RTT")
             Session.worker.execute {
                 val result = runCatching {
@@ -35,9 +41,23 @@ class RttDoctorActivity : ComponentActivity() {
                         }
                         out.toByteArray()
                     }
-                    val a = RttElfAdvice.inspect(ElfFile.parse(bytes))
+                    val elf = ElfFile.parse(bytes)
+                    val a = RttElfAdvice.inspect(elf)
+                    val names = RttElfSymbols.inspect(elf)
+                    symbols = names
+                    val vector = listOf(".isr_vector", ".vectors", ".vector_table", ".intvec", ".vectors_flash")
+                        .mapNotNull { elf.section(it) }.firstOrNull { it.address == 0x08000000L }
+                    val layoutText = if (vector != null) runCatching {
+                        // Six channels: conservative footprint for the first phone experiment.
+                        val layout = RttReferenceLayout.calculate(a.base, 6, vector.size)
+                        "\nЭталонный образ для 6 полей: ${layout.bytes} байт; запас: ${a.available - layout.bytes} байт. " +
+                            "Это расчёт размещения, не готовый образ для загрузки."
+                    }.getOrElse { "\nРазмер эталонного образа не определён: ${it.message}" }
+                    else "\nНе найдена именованная таблица векторов; точный размер не определён."
                     "Конец данных: 0x%08X\nНачальный SP: 0x%08X\nКандидат SRAM: 0x%08X\nДо запаса стека: %d байт\n".format(a.dataEnd, a.initialStack, a.base, a.available) +
-                        if (a.available >= 6144) "Помещается ориентировочный образ 6 КиБ." else "Для ориентировочного образа 6 КиБ места недостаточно."
+                        (if (a.available >= 6144) "Помещается ориентировочный образ 6 КиБ." else "Для ориентировочного образа 6 КиБ места недостаточно.") +
+                        layoutText + "\nTick: " + (names.tick?.let { "%s @ 0x%08X".format(it.first, it.second) } ?: "не найден однозначный символ uwTick/platform_tick") +
+                        "\nSystemCoreClock: " + (names.coreClock?.let { "0x%08X".format(it) } ?: "символ не найден")
                 }.getOrElse { "Оценка недоступна: ${it.message}" }
                 runOnUiThread { memory = result; busy = false }
             }
@@ -48,7 +68,7 @@ class RttDoctorActivity : ComponentActivity() {
         setContent { HwTheme {
             val route by Session.route.collectAsState()
             LaunchedEffect(route) {
-                if (!route.ready || Session.stlink !== observedAdapter) timers = ""
+                if (!route.ready || Session.stlink !== observedAdapter) { timers = ""; timing = "" }
             }
             HwScreen("Подготовка RTT", onBack = ::finish) {
                 SectionCard("Эксперимент · STM32F411") {
@@ -74,9 +94,52 @@ class RttDoctorActivity : ComponentActivity() {
                     if (timers.isNotEmpty()) Text(timers)
                     Text("Кандидат: тактирование и прерывания выключены. Прошивка может включить их позже; выбор требует проверки её конфигурации.", style = MaterialTheme.typography.bodySmall)
                 }
+                SectionCard("Частота и tick") {
+                    OutlinedButton(enabled = !busy && route.ready && memory.isNotEmpty(), onClick = ::inspectTiming) { Text("Проверить частоту и tick") }
+                    Text("Адреса из выбранного ELF. Соответствие прошивке не проверено. Частота берётся из SystemCoreClock с учётом APB1 и TIMPRE; переменная может быть устаревшей.", style = MaterialTheme.typography.bodySmall)
+                    if (timing.isNotEmpty()) Text(timing)
+                }
                 if (busy) LinearProgressIndicator()
             }
         } }
+    }
+    private fun inspectTiming() {
+        busy = true
+        timing = ""
+        val selected = symbols
+        Session.userSaid("запросил проверку частоты и tick для RTT")
+        Session.worker.execute {
+            val adapter = Session.stlink
+            val result = runCatching {
+                val target = Session.target ?: error("Устройство отключено")
+                require(target.vendor == McuVendor.STM32 && target.profileOverride == null && (target.idRegister ?: 0) and 0xFFF == 0x431) { "Нужен автоматически опознанный STM32F411" }
+                val st = adapter ?: error("Адаптер отключён")
+                val s = selected ?: error("Сначала выберите ELF с таблицей символов")
+                val parts = mutableListOf<String>()
+                s.coreClock?.let { address ->
+                    val hclk = st.read32(address).toLong() and 0xFFFFFFFFL
+                    val hz = RttDoctor.timerClockHz(hclk, st.read32(0x40023808), st.read32(0x4002388C))
+                    parts += "HCLK по SystemCoreClock: $hclk Гц\nОценка частоты TIM2–TIM5: $hz Гц"
+                } ?: parts.add("SystemCoreClock не найден; частота не определена.")
+                s.tick?.let { (name, address) ->
+                    val before = st.read32(address).toLong() and 0xFFFFFFFFL
+                    val start = android.os.SystemClock.elapsedRealtime()
+                    Thread.sleep(250)
+                    val after = st.read32(address).toLong() and 0xFFFFFFFFL
+                    val elapsed = android.os.SystemClock.elapsedRealtime() - start
+                    val delta = (after - before) and 0xFFFFFFFFL
+                    parts += "$name: $before → $after; Δ=$delta за $elapsed мс. " +
+                        if (delta in 1..0x7FFFFFFFL) "Счётчик продвигается; единицы времени требуют подтверждения." else "Продвижение не подтверждено."
+                } ?: parts.add("Tick не найден однозначно; проверка пропущена.")
+                parts.joinToString("\n\n")
+            }.getOrElse { "Проверка недоступна: ${it.message}" }
+            Session.programSaid("RTT: $result")
+            runOnUiThread {
+                observedAdapter = adapter
+                timing = if (Session.stlink === adapter && Session.route.value.ready) result else "Устройство отключилось; повторите проверку."
+                busy = false
+            }
+        }
     }
     private fun inspectTimers() {
         busy = true
