@@ -9,6 +9,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import io.github.viacheslavmezentsev.hwlivetest.ui.SectionCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,7 +50,29 @@ fun AboutScreen(onBack: () -> Unit) {
         // Обход папок может занять заметное время — не в главном потоке.
         storage = withContext(Dispatchers.IO) { AboutInfo.storage(context) }
     }
+    var attempt by remember { mutableStateOf(0) }
+    var checking by remember { mutableStateOf(true) }
+    var update by remember { mutableStateOf<ReleaseUpdates.Result?>(null) }
+    LaunchedEffect(attempt) {
+        checking = true
+        update = withContext(Dispatchers.IO) { ReleaseUpdates.check(BuildConfig.VERSION_NAME) }
+        checking = false
+    }
     HwScreen(title = "О программе", onBack = onBack) {
+        SectionCard("Обновление") {
+            Text("Установлена версия " + BuildConfig.VERSION_NAME)
+            Text(if (checking) "Проверка обновлений…" else update?.message.orEmpty())
+            update?.updateUrl?.let { url ->
+                Button(onClick = {
+                    try {
+                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                    } catch (_: android.content.ActivityNotFoundException) {
+                        Toast.makeText(context, "Не найден браузер", Toast.LENGTH_SHORT).show()
+                    }
+                }, enabled = !checking) { Text("Открыть релиз") }
+            }
+            OutlinedButton(onClick = { attempt++ }, enabled = !checking) { Text("Проверить обновления") }
+        }
         for (s in sections + storage) InfoCard(s.title, s.lines, mono = s.mono)
         Button(
             onClick = {

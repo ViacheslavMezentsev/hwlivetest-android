@@ -28,7 +28,7 @@ object ChartSetup {
 
     // ТЗ прошивки 5.22: палитра владельца, красный второй; порядок — порядок отметок.
     val PALETTE = intArrayOf(
-        0xFF005FAF.toInt(), 0xFFAF0000.toInt(), 0xFF007D57.toInt(), 0xFF957300.toInt(),
+        0xFF005FAF.toInt(), 0xFFAF0000.toInt(), 0xFF007D57.toInt(), 0xFF907000.toInt(),
         0xFF77519B.toInt(), 0xFF007575.toInt(), 0xFFAF005F.toInt(), 0xFF5F8700.toInt(),
         0xFFD75F5F.toInt(), 0xFF00AFFF.toInt(), 0xFF00AF5F.toInt(), 0xFFAF5F00.toInt(),
         0xFFAF5FFF.toInt(), 0xFF5F5F87.toInt(), 0xFF875F00.toInt(), 0xFFD75FAF.toInt(),
