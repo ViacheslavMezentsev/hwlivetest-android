@@ -22,6 +22,7 @@ class SettingsActivity : ComponentActivity() {
             val fast by Session.fastActions.collectAsState()
             val route by Session.route.collectAsState()
             var confirmFast by rememberSaveable { mutableStateOf(false) }
+            var showRttDetails by rememberSaveable { mutableStateOf(false) }
             var pollingHz by rememberSaveable { mutableStateOf(Prefs.pollingHz(this@SettingsActivity)) }
             var backup by rememberSaveable { mutableStateOf(Prefs.flashBackup(this@SettingsActivity)) }
             var useSha by rememberSaveable { mutableStateOf(Prefs.useSha(this@SettingsActivity)) }
@@ -34,8 +35,11 @@ class SettingsActivity : ComponentActivity() {
                         style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Опрос устройства") {
-                    Text("Метод: прямое чтение памяти по SWD")
-                    Text("Частота: $pollingHz Гц")
+                    // ТЗ RTT 3.1: подготовка RTT не переключает действующий SWD-опрос.
+                    Text("Прямое чтение SWD · используется", style = MaterialTheme.typography.titleMedium)
+                    Text("Телефон читает выбранные поля памяти. Загрузка кода и остановка ядра не требуются.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Text("Частота чтения: $pollingHz Гц")
                     Slider(value = pollingHz.toFloat(), onValueChange = { pollingHz = it.toInt() },
                         valueRange = PollingRate.MIN_HZ.toFloat()..PollingRate.MAX_HZ.toFloat(), steps = 18,
                         onValueChangeFinished = {
@@ -45,6 +49,23 @@ class SettingsActivity : ComponentActivity() {
                     Text("От 1 до 20 Гц. Общая настройка для сигналов, графиков и страницы модуля. " +
                         "Фактическая частота зависит от числа полей и скорости соединения; медленные опросы не догоняются.",
                         style = MaterialTheme.typography.bodySmall)
+                    HorizontalDivider()
+                    Text("RTT с таймером · в разработке", style = MaterialTheme.typography.titleMedium)
+                    Text("Устройство собирает выборки, телефон забирает их из буфера. Этот способ пока недоступен.",
+                        style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { showRttDetails = !showRttDetails }) {
+                        Text(if (showRttDetails) "Скрыть особенности RTT" else "Особенности RTT")
+                    }
+                    if (showRttDetails) {
+                        Text("Частота выборки на устройстве и частота чтения буфера телефоном задаются отдельно. " +
+                            "Ползунок выше относится только к прямому чтению SWD.", style = MaterialTheme.typography.bodySmall)
+                        Text("Нужны выделенная область SRAM, свободный таймер и доступ к управлению. " +
+                            "Заглушка временно меняет работу устройства; Flash не перепрошивается. " +
+                            "При установке и снятии ядро останавливается.", style = MaterialTheme.typography.bodySmall)
+                        Text("После остановки записи требуется снять заглушку, восстановить настройки и проверить, " +
+                            "что прошивка продолжает работать. При обрыве USB восстановление не гарантируется.",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 SectionCard("Запись") {
                     Text("Формат записи: MCAP (ROS 1)")
