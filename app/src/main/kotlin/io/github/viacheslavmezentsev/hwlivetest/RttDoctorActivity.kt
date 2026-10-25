@@ -144,7 +144,8 @@ class RttDoctorActivity : ComponentActivity() {
                     Text("Первые до шести выровненных полей SRAM из таблицы сигналов:")
                     Text(fields.joinToString("\n") { it.topic }.ifEmpty { "Загрузите таблицу на странице «Сигналы»." })
                     if (!Session.writeMode) Text("Включите «Доступ» на странице «Устройство».")
-                    Button(enabled = !busy && !trialRunning && route.ready && Session.writeMode && selectedElf != null && fields.isNotEmpty(),
+                    if (Session.recording != null) Text("Сначала остановите текущую запись.")
+                    Button(enabled = !busy && !trialRunning && Session.recording == null && route.ready && Session.writeMode && selectedElf != null && fields.isNotEmpty(),
                         onClick = { confirmTrial = true }) { Text("Проба на 5 секунд") }
                     if (trialRunning) OutlinedButton(onClick = { trial?.cancel() }) { Text("Остановить и восстановить") }
                     if (trialResult.isNotEmpty()) Text(trialResult)
@@ -164,6 +165,10 @@ class RttDoctorActivity : ComponentActivity() {
 
     private fun runTrial() {
         if (busy || trialRunning) return
+        if (Session.recording != null) {
+            trialResult = "Сначала остановите текущую запись."
+            return
+        }
         val elf = selectedElf ?: return
         val fields = RttTrial.fields()
         val runner = RttTrial()
