@@ -54,25 +54,40 @@ class RttTrial {
                 .put("resources_assumed_free", true).put("elf_matches_firmware", JSONObject.NULL)
             reportFile.writeText(report.toString(2))
             val decoder = RttFrameDecoder(fields.size)
+            var firstTick: Long? = null
+            var lastTick: Long? = null
             val session = RttSession.forDevice(adapter, write, built.image, 0x431,
                 built.control, built.buffer, built.bufferBytes)
             val output = File(directory, "$stem.rtt.bin").outputStream()
             running = session
             if (cancelled.get()) session.cancel()
             val result = session.run(5000, object : RttSession.Sink {
-                override fun accept(bytes: ByteArray) { output.write(bytes); decoder.feed(bytes) }
+                override fun accept(bytes: ByteArray) {
+                    output.write(bytes)
+                    decoder.feed(bytes).forEach { frame ->
+                        if (firstTick == null) firstTick = frame.tickMs
+                        lastTick = frame.tickMs
+                    }
+                }
                 override fun close() = output.close()
             })
             val stats = decoder.stats
+            val span = if (firstTick != null && lastTick != null) (lastTick!! - firstTick!!) and 0xFFFFFFFFL else 0L
+            val measuredHz = if (span in 1..0x7FFFFFFFL && stats.frames > 1 && stats.tickBackwards == 0L)
+                (stats.frames - 1) * 1000.0 / span else null
             report.put("status", result.reason).put("bytes", result.bytes).put("frames", stats.frames)
                 .put("missing_estimate", stats.missingEstimate).put("duplicates", stats.duplicates)
                 .put("discarded_bytes", stats.discardedBytes).put("pending_bytes", decoder.pendingBytes)
                 .put("tick_backwards", stats.tickBackwards).put("sequence_discontinuities", stats.sequenceDiscontinuities)
                 .put("target_dropped", JSONObject.NULL)
+                .put("first_tick", firstTick ?: JSONObject.NULL).put("last_tick", lastTick ?: JSONObject.NULL)
+                .put("received_hz_by_tick_ms", measuredHz ?: JSONObject.NULL)
+                .put("repeated_ticks", stats.repeatedTicks).put("tick_wraps", stats.tickWraps)
                 .put("restored", result.recovery?.ok ?: false).put("recovery_stage", result.recovery?.stage ?: "not_started")
                 .put("recovery_error", result.recovery?.error ?: JSONObject.NULL)
                 .put("error", result.error ?: JSONObject.NULL).put("close_error", result.closeError ?: JSONObject.NULL)
             message = "Кадров: ${stats.frames}; пропуски seq: ${stats.missingEstimate}.\n" +
+                (measuredHz?.let { "Частота по tick: %.1f Гц.\n".format(java.util.Locale.ROOT, it) } ?: "") +
                 "Завершение: ${result.reason}.\nВосстановление: " +
                 (if (result.recovery?.ok == true) "подтверждено" else "НЕ подтверждено; проверьте устройство") +
                 listOfNotNull(result.error, result.recovery?.error, result.closeError).joinToString("\n", prefix = "\n")

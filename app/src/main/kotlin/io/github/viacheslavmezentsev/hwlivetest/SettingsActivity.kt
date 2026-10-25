@@ -51,7 +51,7 @@ class SettingsActivity : ComponentActivity() {
                         style = MaterialTheme.typography.bodySmall)
                     HorizontalDivider()
                     Text("RTT с таймером · в разработке", style = MaterialTheme.typography.titleMedium)
-                    Text("Устройство собирает выборки, телефон забирает их из буфера. Этот способ пока недоступен.",
+                    Text("Устройство собирает выборки, телефон забирает их из буфера. Для F411 доступна отдельная проба: 100 Гц, 5 секунд. Постоянная запись RTT ещё не подключена.",
                         style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = {
                         startActivity(android.content.Intent(this@SettingsActivity, RttDoctorActivity::class.java))
