@@ -135,7 +135,7 @@ object Session {
     @Volatile
     var targetText: String = ""
 
-    /** Последний отчёт кнопки «ПУСК». */
+    /** Последний отчёт кнопки «Проверить плату». */
     @Volatile
     var lastReport: io.github.viacheslavmezentsev.hwlivetest.diag.DiagReport? = null
 
@@ -270,10 +270,14 @@ object Session {
         notifyChanged()
     }
 
-    fun disableWriteMode() {
+    fun disableWriteMode(userInitiated: Boolean = false) {
         fastActionsState.value = false
         writePermit?.revoke()
-        if (writePermit != null) userSaid("выключил доступ к управлению")
+        if (writePermit != null) {
+            // ТЗ прошивки 5.22.5: автоматическое отключение не является действием пользователя.
+            if (userInitiated) userSaid("выключил доступ к управлению")
+            else programSaid("доступ к управлению отключён автоматически")
+        }
         writePermit = null
         notifyChanged()
     }

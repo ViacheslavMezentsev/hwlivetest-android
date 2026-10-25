@@ -12,13 +12,13 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Круглая кнопка «ПУСК» с кольцом делений: во время проверки деления заполняются по
+ * Круглая кнопка «Проверить плату» с кольцом делений: во время проверки деления заполняются по
  * часовой стрелке, в центре — подпись и проценты. После проверки круг окрашивается
  * в цвет итога.
  */
 class StartButton(context: Context, attrs: AttributeSet?) : View(context, attrs) {
 
-    var label: String = "ПУСК"
+    var label: String = "Проверить плату"
         set(v) {
             field = v
             invalidate()

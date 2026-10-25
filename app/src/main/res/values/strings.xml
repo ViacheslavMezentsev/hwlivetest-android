@@ -28,7 +28,7 @@
     <string name="btn_fields">Поля…</string>
     <string name="scale_shared">Шкала: общая</string>
     <string name="scale_own">Шкала: своя</string>
-    <string name="start">ПУСК</string>
+    <string name="start">Проверить плату</string>
     <string name="stop">СТОП</string>
     <string name="again">ЕЩЁ РАЗ</string>
     <string name="section_tools">Инструменты (только чтение)</string>
@@ -36,7 +36,7 @@
     <string name="tool_check">Сверить с HEX</string>
     <string name="tool_fields">Поля и графики</string>
     <string name="tool_write_note">Прошивка, стирание, остановка и сброс меняют MCU — доступны в режиме эксперта: меню «Прошивка» и «Устройство», переключатель «Доступ» в разделе «Управление».</string>
-    <string name="simple_hint">Подключите ST-Link к телефону и плату к ST-Link, затем нажмите ПУСК: приложение проверит, жив ли MCU, тактируется ли он, работает ли прошивка.</string>
+    <string name="simple_hint">Подключите ST-Link к телефону и плату к ST-Link, затем нажмите Проверить плату: приложение проверит, жив ли MCU, тактируется ли он, работает ли прошивка.</string>
     <string name="record_start">● Запись</string>
     <string name="record_stop">■ Стоп</string>
     <string name="share">Отправить</string>

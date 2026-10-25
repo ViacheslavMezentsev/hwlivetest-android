@@ -170,7 +170,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         sync()
         if (ui.file == null && !ui.busy) Prefs.firmwareUri(this)?.let {
             if (Session.route.value.ready) readVoltage()
-            loadHex(Uri.parse(it))
+            loadHex(Uri.parse(it), userInitiated = false)
         }
         setContent {
             HwTheme {
@@ -178,20 +178,20 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
                     ui = ui,
                     actions = FlashActions(
                         back = { leave() },
-                        connect = { connect() },
+                        connect = { Session.userSaid("нажал «Подключить» на странице «Прошивка»"); connect() },
                         pickFile = { openHex.launch(arrayOf("*/*")) },
                         backupAll = { askBackupFile() },
                         expectedSha = { ui.expectedSha = it; rebuildPlan() },
                         writeMode = { on ->
-                            if (!ui.readOnly) { if (on) Session.enableWriteMode() else Session.disableWriteMode(); sync() }
+                            if (!ui.readOnly) { if (on) Session.enableWriteMode() else Session.disableWriteMode(userInitiated = true); sync() }
                         },
                         run = { on -> ui.run = on },
                         check = { check() },
                         flash = { confirmFlash() },
                         eraseUnits = { confirmEraseUnits() },
-                        massErase = { ui.confirm = massConfirm() },
+                        massErase = { Session.userSaid("запросил полное стирание Flash"); ui.confirm = massConfirm() },
                         massEraseConfirmed = { massErase() },
-                        cancel = { cancel = true },
+                        cancel = { Session.userSaid("запросил отмену операции с Flash"); cancel = true },
                         share = { share() },
                         leave = { runCore ->
                             ui.askLeave = false
@@ -255,7 +255,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         listOfNotNull(t.shortName, t.flashSizeKb?.let { "Flash $it КБ" }).joinToString(", ")
     } ?: "не опознан"
 
-    private fun loadHex(uri: Uri) {
+    private fun loadHex(uri: Uri, userInitiated: Boolean = true) {
         ui.busy = true
         Session.worker.execute {
             try {
@@ -263,7 +263,8 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
                 val name = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
                     if (c.moveToFirst()) c.getString(0) else null
                 } ?: uri.lastPathSegment ?: "файл"
-                Session.userSaid("выбрал файл $name (${bytes.size} байт)")
+                if (userInitiated) Session.userSaid("выбрал файл $name (${bytes.size} байт)")
+                else Session.programSaid("восстановлен выбранный ранее файл $name (${bytes.size} байт)")
                 // ТЗ прошивки 5.9 (р.1.4): ELF — образ по LMA и таблица сигналов из DWARF.
                 val table = if (ElfFile.isElf(bytes)) SignalTable.fromElf(bytes, name) else null
                 val parsed = table?.image ?: IntelHex.parse(String(bytes, Charsets.US_ASCII))
@@ -466,7 +467,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
                 outcome.hint?.let { add("Подсказка: $it") }
                 outcome.mismatches.take(5).forEach { add("  %08X: ожидалось %02X, прочитано %02X".format(it.address, it.expected, it.actual)) }
                 backupFile?.let { add("Резервная копия: ${it.name}") }
-                if (outcome.ok && outcome.running) add("Проверьте работу программы кнопкой «ПУСК» в простом режиме.")
+                if (outcome.ok && outcome.running) add("Проверьте работу программы кнопкой «Проверить плату» в простом режиме.")
                 if (outcome.steps.isNotEmpty()) add("Шаги:")
                 outcome.steps.forEach { add("  ${it.text}") }
                 st.stats.lines().forEach { add("  $it") }

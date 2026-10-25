@@ -48,7 +48,7 @@ class ChartActivity : ComponentActivity() {
     private lateinit var connector: Connector
     private val onSessionChanged: () -> Unit = {
         applyTopics()
-        if (!Session.route.value.ready && Session.recording != null && !ui.recordBusy) stopRecording(showResult = true)
+        if (!Session.route.value.ready && Session.recording != null && !ui.recordBusy) stopRecording(showResult = true, reason = "потеря подключения")
         if (resumed) startPolling()
     }
     private val redraw = object : Runnable {
@@ -84,17 +84,18 @@ class ChartActivity : ComponentActivity() {
         applyTopics()
         setContent { HwTheme { ChartScreen(ui, fields(), Session.fieldsFile?.fields.orEmpty(),
             onBack = ::finish,
-            onTopics = { topics -> ui.topics = topics; applyTopics(); startPolling() },
-            onPause = { ui.paused = !ui.paused; ui.pausedAt = Session.nowMs(); refresh() },
-            onRecord = ::toggleRecording,
+            onTopics = { topics -> Session.userSaid("применил каналы графика: " + topics.joinToString()); ui.topics = topics; applyTopics(); startPolling() },
+            onPause = { Session.userSaid(if (ui.paused) "возобновил график" else "приостановил график (опрос и запись продолжаются)"); ui.paused = !ui.paused; ui.pausedAt = Session.nowMs(); refresh() },
+            onRecord = { Session.userSaid(if (Session.recording == null) "нажал «Запись»" else "нажал «Остановить» запись"); toggleRecording() },
             onConnect = {
+                Session.userSaid("нажал «Подключить» на странице графика")
                 ui.connecting = true
                 connector.connect { info ->
                     ui.connecting = false
                     if (info != null) { ui.paused = false; applyTopics(); if (resumed) startPolling() }
                 }
             },
-            onExport = { withFolder("export", ::exportBuffer) },
+            onExport = { Session.userSaid("нажал «Сохранить буфер»"); withFolder("export", ::exportBuffer) },
             onClear = {
                 if (!ui.recordBusy && Session.recording == null) Session.worker.execute {
                     Session.clearTelemetry("пользователь начал новый интервал")
@@ -135,7 +136,7 @@ class ChartActivity : ComponentActivity() {
 
     override fun onStop() {
         // ТЗ прошивки 5.21: закрыть файл в фоне; поворот сохраняет текущую запись.
-        if (!isChangingConfigurations && (Session.recording != null || ui.recordBusy)) stopRecording(showResult = !isFinishing)
+        if (!isChangingConfigurations && (Session.recording != null || ui.recordBusy)) stopRecording(showResult = !isFinishing, reason = "уход с экрана графика")
         super.onStop()
     }
 
@@ -163,7 +164,7 @@ class ChartActivity : ComponentActivity() {
             onStopped = { error -> runOnUiThread {
                 if (resumed && generation == current) {
                     ui.error = error
-                    if (Session.recording != null && !ui.recordBusy) stopRecording(showResult = true)
+                    if (Session.recording != null && !ui.recordBusy) stopRecording(showResult = true, reason = "остановка опроса: $error")
                 }
             } },
         )
@@ -208,9 +209,9 @@ class ChartActivity : ComponentActivity() {
                     check(Session.route.value.ready) { "Устройство отключено" }
                     val rec = Recording.create(this, tree, Recording.fileName("hwlivetest"), fs)
                     Session.recording = rec
-                    Session.logLine("# запись MCAP: ${rec.name}, полей ${fs.size}")
+                    Session.programSaid("запись MCAP начата: ${rec.name}, каналов ${fs.size}")
                 } catch (e: Exception) {
-                    Session.logLine("# запись MCAP: ${e.message}")
+                    Session.programSaid("запись MCAP не начата: ${e.message}")
                     runOnUiThread { ui.message = "Не удалось начать запись: ${e.message}" }
                 }
                 runOnUiThread { ui.recordBusy = false; refresh() }
@@ -218,7 +219,7 @@ class ChartActivity : ComponentActivity() {
         }
     }
 
-    private fun stopRecording(showResult: Boolean) {
+    private fun stopRecording(showResult: Boolean, reason: String = "по запросу пользователя") {
         ui.recordBusy = true
         Session.worker.execute {
             val rec = Session.recording
@@ -230,8 +231,8 @@ class ChartActivity : ComponentActivity() {
             } catch (e: Exception) {
                 e.message
             }
-            Session.logLine(
-                "# запись MCAP завершена: ${rec.name}, сообщений ${rec.messages}, ${rec.bytes / 1024} КБ" +
+            Session.programSaid(
+                "запись MCAP завершена ($reason): ${rec.name}, сообщений ${rec.messages}, ${rec.bytes / 1024} КБ" +
                     (err?.let { ", ошибка: $it" } ?: ""),
             )
             if (showResult) runOnUiThread { showSaved(rec.uri, rec.name, rec.messages, rec.bytes, err) }
@@ -250,7 +251,7 @@ class ChartActivity : ComponentActivity() {
                 val rec = Recording.create(this, tree, Recording.fileName("hwlivetest_export"), fs)
                 rec.writeSeries(fs, { sampler.series(it) }, Session.nowMs() - 300_000L, wall0)
                 rec.close()
-                Session.logLine("# экспорт MCAP: ${rec.name}, сообщений ${rec.messages}")
+                Session.programSaid("буфер сохранён в MCAP: ${rec.name}, сообщений ${rec.messages}")
                 runOnUiThread { showSaved(rec.uri, rec.name, rec.messages, rec.bytes, null) }
             } catch (e: Exception) {
                 runOnUiThread { ui.message = "Экспорт не удался: ${e.message}" }

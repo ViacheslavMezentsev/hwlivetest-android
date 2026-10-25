@@ -21,7 +21,7 @@ object AboutInfo {
         "stlink" to "ST-Link V2/V2-1/V3: SWD, чтение памяти, опознание Cortex-M, STM32, AT32",
         "usb" to "поиск приборов, разрешения USB, транспорт ST-Link и FX2",
         "fx2la" to "логический анализатор на FX2 (fx2lafw): загрузка прошивки, пробный захват до 24 МГц",
-        "diag" to "эвристики кнопки «ПУСК»",
+        "diag" to "эвристики кнопки «Проверить плату»",
         "telemetry" to "поля addresses.json, опрос, ряды и оси графиков",
         "recorder" to "запись MCAP (ROS 1 std_msgs)",
         "firmware" to "Intel HEX, резервная копия и сверка Flash",

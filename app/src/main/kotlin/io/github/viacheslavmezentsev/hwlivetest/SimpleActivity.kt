@@ -19,7 +19,7 @@ import io.github.viacheslavmezentsev.hwlivetest.diag.Diagnostics
 import io.github.viacheslavmezentsev.hwlivetest.ui.HwTheme
 import java.util.concurrent.CancellationException
 
-/** Состояние диагностики переживает поворот; повторный ПУСК не создаёт вторую операцию. */
+/** Состояние диагностики переживает поворот; повторный Проверить плату не создаёт вторую операцию. */
 class SimpleUi : ViewModel() {
     var status by mutableStateOf("")
     var tone by mutableStateOf(Connector.Tone.NORMAL)
@@ -81,14 +81,15 @@ class SimpleActivity : ComponentActivity() {
         if (ui.tone == Connector.Tone.ERROR) return
         ui.status = when {
             Session.route.value.ready -> "Подключено: " + Session.target?.shortName
-            Session.device != null -> "Найден ST-Link. Нажмите ПУСК."
-            else -> "Подключите ST-Link через OTG и нажмите ПУСК."
+            Session.device != null -> "Найден ST-Link. Нажмите «Проверить плату»."
+            else -> "Подключите ST-Link через OTG и нажмите «Проверить плату»."
         }
         ui.tone = if (Session.route.value.ready) Connector.Tone.OK else Connector.Tone.NORMAL
     }
 
     private fun onStartPressed() {
         if (ui.running) {
+            Session.userSaid("нажал «Остановить проверку»")
             ui.cancel = true
             ui.step = "Останавливаю…"
             return
@@ -98,7 +99,7 @@ class SimpleActivity : ComponentActivity() {
         ui.tone = Connector.Tone.NORMAL
         ui.progress = 0f
         ui.step = "Подключение и опознание MCU…"
-        Session.userSaid("нажал ПУСК")
+        Session.userSaid(if (ui.report == null) "нажал «Проверить плату»" else "нажал «Повторить проверку»")
         Session.stopPolling()
         if (Session.route.value.ready) runDiagnostics()
         else connector.connect { info ->

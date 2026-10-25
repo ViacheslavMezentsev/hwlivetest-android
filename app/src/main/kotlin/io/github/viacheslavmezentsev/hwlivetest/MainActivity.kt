@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
                         startActivity(Intent(this, ChartActivity::class.java).putStringArrayListExtra(ChartActivity.EXTRA_TOPICS, ArrayList(topics)))
                     },
                     onChart = { f ->
-                        Session.userSaid("открыть график: "+f.topic)
+                        Session.userSaid("открыл график: "+f.topic)
                         startActivity(Intent(this, ChartActivity::class.java).putExtra(ChartActivity.EXTRA_TOPIC, f.topic))
                     },
                 )
@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
     private fun connect() {
         stopFieldPolling()
         ui.busy = true
-        Session.userSaid("подключить и опознать ST-Link")
+        Session.userSaid("нажал «Подключить» на странице «Сигналы»")
         connector.connect { info ->
             ui.busy = false
             sync()

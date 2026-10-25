@@ -87,8 +87,8 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
                 TargetScreen(
                     ui = ui,
                     onBack = { leave() },
-                    onConnect = { connect() },
-                    onRefresh = { refresh() },
+                    onConnect = { Session.userSaid("нажал «Подключить» на странице «Устройство»"); connect() },
+                    onRefresh = { Session.userSaid("обновил состояние ядра"); refresh() },
                     onProfile = { profile ->
                         val connection = Session.stlink
                         ui.busy = true
@@ -147,7 +147,7 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
     }
 
     private fun setWriteMode(on: Boolean) {
-        if (on) Session.enableWriteMode() else Session.disableWriteMode()
+        if (on) Session.enableWriteMode() else Session.disableWriteMode(userInitiated = true)
         sync()
     }
 
