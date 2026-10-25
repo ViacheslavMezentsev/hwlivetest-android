@@ -38,6 +38,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -103,6 +104,7 @@ fun HwScreen(
     val page = host?.workspacePage
     val route by Session.route.collectAsState()
     val fast by Session.fastActions.collectAsState()
+    val access by Session.writeAccess.collectAsState()
     val threshold = with(LocalDensity.current) { 72.dp.toPx() }
     val swipe = if (page != null && navigationEnabled) Modifier.pointerInput(page, navigationEnabled) {
         var distance = 0f
@@ -148,6 +150,19 @@ fun HwScreen(
                 actions = actions,
             )
             RecordingStatus(keepAwake)
+            // ТЗ прошивки 5.23.4: единый доступ текущего сеанса на всех рабочих экранах.
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(route.label + if (fast) " · Быстрые действия" else "",
+                    Modifier.weight(1f), style = MaterialTheme.typography.labelSmall,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (onBack != null) {
+                    Text("Доступ", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp))
+                    Switch(checked = access, enabled = navigationEnabled && route.ready,
+                        onCheckedChange = { enabled ->
+                            if (enabled) Session.enableWriteMode() else Session.disableWriteMode(userInitiated = true)
+                        })
+                }
+            }
             }
         },
         bottomBar = {
@@ -172,8 +187,6 @@ fun HwScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(route.label + if (fast) " · Быстрые действия включены" else "", style = MaterialTheme.typography.labelSmall, maxLines = 2,
-                overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
             content()
         }
 

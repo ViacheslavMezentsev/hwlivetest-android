@@ -266,11 +266,15 @@ object Session {
     var writePermit: WritePermit? = null
         private set
 
+    private val writeAccessState = MutableStateFlow(false)
+    val writeAccess = writeAccessState.asStateFlow()
+
     val writeMode: Boolean get() = writePermit?.active == true
 
     fun enableWriteMode() {
         if (writeMode) return
         writePermit = WritePermit.grant("доступ к управлению включён пользователем")
+        writeAccessState.value = true
         userSaid("включил доступ к управлению")
         notifyChanged()
     }
@@ -284,6 +288,7 @@ object Session {
             else programSaid("доступ к управлению отключён автоматически")
         }
         writePermit = null
+        writeAccessState.value = false
         notifyChanged()
     }
 

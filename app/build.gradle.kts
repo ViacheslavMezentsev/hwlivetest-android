@@ -22,7 +22,7 @@ val buildTime: String = buildInstant.toString()
 val versionMinutes: Int = ((buildInstant.epochSecond - Instant.parse("2026-01-01T00:00:00Z").epochSecond) / 60).toInt()
 val ciRun: Int? = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
 // versionName: последнее число увеличивается с каждой сборкой, отданной на установку (AGENTS.md).
-val appVersion = "0.3.23"
+val appVersion = "0.3.24"
 
 android {
     namespace = "io.github.viacheslavmezentsev.hwlivetest"

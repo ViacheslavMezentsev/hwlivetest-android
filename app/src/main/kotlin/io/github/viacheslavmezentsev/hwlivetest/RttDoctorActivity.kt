@@ -16,19 +16,20 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.*
 
 /** ТЗ RTT 2.3, 2.9: read-only preparation and separately confirmed short trial. */
 class RttDoctorActivity : ComponentActivity() {
-    @Volatile private var selectedElf: ElfFile? = null
     companion object {
+        // ТЗ RTT 3.2: выбор ELF принадлежит сеансу, а не экземпляру Activity.
+        private var selectedElf by mutableStateOf<ElfFile?>(null)
+        @Volatile private var symbols: RttElfSymbols.Symbols? = null
+        private var memory by mutableStateOf("")
+        private var busy by mutableStateOf(false)
         private var trial: RttTrial? = null
         private var trialRunning by mutableStateOf(false)
         private var trialResult by mutableStateOf("")
         private var trialSummary by mutableStateOf("")
     }
     private var confirmTrial by mutableStateOf(false)
-    private var busy by mutableStateOf(false)
-    private var memory by mutableStateOf("")
     private var timers by mutableStateOf("")
     private var observedAdapter: Any? = null
-    @Volatile private var symbols: RttElfSymbols.Symbols? = null
     private var timing by mutableStateOf("")
     private val saveTrial = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         val report = RttTrial.lastReport
@@ -98,6 +99,7 @@ class RttDoctorActivity : ComponentActivity() {
         setContent { HwTheme {
             val route by Session.route.collectAsState()
             val debug by Session.debugDetails.collectAsState()
+            val access by Session.writeAccess.collectAsState()
             var showFields by remember { mutableStateOf(false) }
             LaunchedEffect(route) {
                 if (!route.ready || Session.stlink !== observedAdapter) { timers = ""; timing = "" }
@@ -113,7 +115,7 @@ class RttDoctorActivity : ComponentActivity() {
                 dismissButton = { TextButton(onClick = { confirmTrial = false }) { Text("Отмена") } },
             )
             HwScreen("Проба RTT", onBack = { if (trialRunning) trial?.cancel() else finish() },
-                navigationEnabled = !trialRunning, keepAwake = trialRunning) {
+                navigationEnabled = !trialRunning && !busy, keepAwake = trialRunning) {
                 SectionCard("Запись сигналов · 100 Гц · 5 секунд") {
                     Text("Выберите ELF текущей прошивки и запустите пробу. Проверки выполнятся автоматически.")
                     if (!route.ready) Text("Сначала подключите плату на странице «Устройство».")
@@ -158,9 +160,9 @@ class RttDoctorActivity : ComponentActivity() {
                         Text(if (showFields) "Скрыть сигналы" else "Показать сигналы")
                     }
                     if (debug || showFields) Text(fields.joinToString("\n") { if (debug) it.topic else it.shortName })
-                    if (!Session.writeMode) Text("Включите «Доступ» на странице «Устройство».")
+                    if (!access) Text("Включите «Доступ» в шапке экрана.")
                     if (Session.recording != null) Text("Сначала остановите текущую запись.")
-                    Button(enabled = !busy && !trialRunning && Session.recording == null && route.ready && Session.writeMode && selectedElf != null && fields.isNotEmpty(),
+                    Button(enabled = !busy && !trialRunning && Session.recording == null && route.ready && access && selectedElf != null && fields.isNotEmpty(),
                         onClick = { confirmTrial = true }) { Text("Проба на 5 секунд") }
                     if (trialRunning) OutlinedButton(onClick = { trial?.cancel() }) { Text("Остановить и восстановить") }
                     if (trialResult.isNotEmpty()) Text(if (debug) trialResult else trialSummary)

@@ -21,6 +21,7 @@ class SettingsActivity : ComponentActivity() {
             val debug by Session.debugDetails.collectAsState()
             val fast by Session.fastActions.collectAsState()
             val route by Session.route.collectAsState()
+            val access by Session.writeAccess.collectAsState()
             var confirmFast by rememberSaveable { mutableStateOf(false) }
             var showRttDetails by rememberSaveable { mutableStateOf(false) }
             var pollingHz by rememberSaveable { mutableStateOf(Prefs.pollingHz(this@SettingsActivity)) }
@@ -75,12 +76,12 @@ class SettingsActivity : ComponentActivity() {
                     Text("Экран остаётся включённым при просмотре графиков и во время записи. Пауза графика не останавливает запись.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Действия с устройством") {
-                    SettingSwitch("Быстрые действия", fast, route.ready && Session.writeMode) {
+                    SettingSwitch("Быстрые действия", fast, route.ready && access) {
                         if (it) confirmFast = true else Session.setFastActions(false)
                     }
                     Text("Остановка, запуск и сброс ядра без повторного вопроса. Действует до отключения адаптера, выключения управления устройством или завершения приложения.",
                         style = MaterialTheme.typography.bodySmall)
-                    if (!Session.writeMode) Text("Сначала включите «Доступ» в разделе «Управление» на странице «Устройство».")
+                    if (!access) Text("Включите «Доступ» в шапке экрана.")
                     Text("Прошивка, стирание и импульс NRST сохраняют подтверждения.", style = MaterialTheme.typography.bodySmall)
                     SettingSwitch("Использовать SHA-256", useSha) {
                         useSha = it; Prefs.setUseSha(this@SettingsActivity, it)

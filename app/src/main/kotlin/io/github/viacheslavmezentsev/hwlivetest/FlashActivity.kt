@@ -18,7 +18,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
@@ -768,10 +767,6 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
         }
 
         if (!ui.readOnly) SectionCard("Управление") {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Доступ", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = ui.writeMode, onCheckedChange = actions.writeMode, enabled = !ui.busy)
-            }
             CheckRow("Запустить после прошивки", ui.run, actions.run)
             Text("Копия: "+(if (ui.backup) "включена" else "выключена")+" · Сверка обязательна", style = MaterialTheme.typography.bodySmall)
             val reason = when {

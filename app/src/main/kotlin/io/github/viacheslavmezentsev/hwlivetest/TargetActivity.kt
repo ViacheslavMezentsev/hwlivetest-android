@@ -10,7 +10,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
@@ -281,10 +280,6 @@ fun TargetScreen(
             Text("Ручной профиль задаёт проверки чтением, но не разрешает прошивку неизвестного MCU. Сбрасывается при отключении.", style = MaterialTheme.typography.bodySmall)
         }
         SectionCard("Управление") {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Доступ", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = ui.writeMode, enabled = !ui.busy, onCheckedChange = onWriteMode)
-            }
             Text(
                 "Выключен при каждом запуске приложения. Подтверждения команд ядра настраиваются в «Быстрых действиях». " +
                     "Option bytes и защита Flash не меняются.",
