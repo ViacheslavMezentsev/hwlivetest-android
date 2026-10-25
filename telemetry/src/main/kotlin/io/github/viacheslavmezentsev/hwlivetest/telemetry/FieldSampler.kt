@@ -6,6 +6,8 @@ package io.github.viacheslavmezentsev.hwlivetest.telemetry
  * Значения вне min/max не попадают в ряд, но показываются в [Reading].
  */
 class FieldSampler(fields: List<Field>, capacity: Int = DEFAULT_CAPACITY) {
+    /** ТЗ ST-Link 5.13: неизвестная карта — строго выбранные слова, без чтения соседей. */
+    var groupReads: Boolean = true
     val fields: List<Field> = fields.toList()
     private val series: Map<String, TimeSeries> = this.fields.associate { it.topic to TimeSeries(capacity) }
 
@@ -42,7 +44,7 @@ class FieldSampler(fields: List<Field>, capacity: Int = DEFAULT_CAPACITY) {
             if (isFatal(e)) throw e
             Result.failure(e)
         }
-        for (b in ReadPlan.blocks(wanted.map { it.address })) {
+        for (b in ReadPlan.blocks(wanted.map { it.address }, maxBytes = if (groupReads) 1024 else 4)) {
             val r = attempt(b.address, b.words)
             val words = r.getOrNull()
             for (f in wanted) {

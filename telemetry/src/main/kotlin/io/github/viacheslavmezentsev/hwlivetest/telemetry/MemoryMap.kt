@@ -10,6 +10,7 @@ object MemoryMap {
     const val SRAM_BASE = 0x20000000L
 
     enum class Region(val title: String) {
+        CODE("область кода"),
         FLASH("Flash"),
         SRAM("SRAM"),
         SYSTEM("системная память / CCM"),
@@ -30,11 +31,15 @@ object MemoryMap {
     }
 
     /** [flashKb] и [sramKb] — размеры, если известны после опознания MCU. */
-    fun check(address: Long, flashKb: Int?, sramKb: Int?): Check {
-        val r = region(address)
+    fun check(address: Long, flashKb: Int?, sramKb: Int?, stm32Layout: Boolean = true): Check {
+        val r = if (!stm32Layout && address in 0L..0x1FFFFFFFL) Region.CODE else region(address)
         if (address and 3L != 0L) {
             return Check(r, readable = false, warning = "адрес не выровнен на 4 — чтение не поддерживается")
         }
+        if (!stm32Layout) return Check(r, readable = address in 0L..0xFFFFFFFCL, warning = when (r) {
+            Region.PERIPHERAL, Region.PPB -> "регистр: чтение может менять состояние; карта MCU не подтверждена"
+            else -> "общий профиль Cortex-M: наличие памяти и её границы не подтверждены"
+        })
         val warning = when (r) {
             Region.FLASH -> flashKb?.let {
                 if (address >= FLASH_BASE + it * 1024L) "за пределами Flash ($it КБ)" else null

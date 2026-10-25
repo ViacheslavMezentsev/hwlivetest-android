@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.McuProfile
 import io.github.viacheslavmezentsev.hwlivetest.stlink.CoreState
 import io.github.viacheslavmezentsev.hwlivetest.stlink.CortexDebugRegs
 import io.github.viacheslavmezentsev.hwlivetest.stlink.TargetWrite
@@ -46,6 +47,8 @@ class TargetUi : androidx.lifecycle.ViewModel() {
     var connected by mutableStateOf(false)
     var adapter by mutableStateOf("")
     var target by mutableStateOf("")
+    var profileLabel by mutableStateOf("")
+    var chooseProfile by mutableStateOf(false)
     var core by mutableStateOf<CoreState?>(null)
     var writeMode by mutableStateOf(false)
     var busy by mutableStateOf(false)
@@ -86,6 +89,14 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
                     onBack = { leave() },
                     onConnect = { connect() },
                     onRefresh = { refresh() },
+                    onProfile = { profile ->
+                        val connection = Session.stlink
+                        ui.busy = true
+                        Session.worker.execute {
+                            if (connection != null && connection === Session.stlink) Session.applyProfile(profile)
+                            runOnUiThread { ui.busy = false; sync() }
+                        }
+                    },
                     onWriteMode = { on -> setWriteMode(on) },
                     onAction = { name, op -> confirmChange(name, op) },
                     onLeave = { run ->
@@ -103,6 +114,7 @@ class TargetActivity : ComponentActivity(), WorkspaceHost {
         ui.adapter = Session.adapterText
         ui.target = Session.targetText
         ui.writeMode = Session.writeMode
+        ui.profileLabel = Session.target?.let { it.profile.title + if (it.profileOverride != null) " (вручную)" else " (автоматически)" } ?: "не определён"
     }
 
     private fun connect() {
@@ -211,10 +223,21 @@ fun TargetScreen(
     onBack: () -> Unit,
     onConnect: () -> Unit,
     onRefresh: () -> Unit,
+    onProfile: (McuProfile?) -> Unit,
     onWriteMode: (Boolean) -> Unit,
     onAction: (String, (TargetWrite) -> CoreState?) -> Unit,
     onLeave: (Boolean) -> Unit,
 ) {
+    if (ui.chooseProfile) AlertDialog(onDismissRequest = { ui.chooseProfile = false },
+        title = { Text("Профиль MCU") },
+        text = { androidx.compose.foundation.layout.Column {
+            Text("Выбирайте совместимый профиль только по документации устройства: он читает регистры выбранного семейства. При сомнении используйте общий Cortex-M.")
+            TextButton(onClick = { ui.chooseProfile = false; onProfile(null) }) { Text("Автоматический") }
+            McuProfile.selectable.forEach { profile ->
+                TextButton(onClick = { ui.chooseProfile = false; onProfile(profile) }) { Text(profile.title) }
+            }
+        } },
+        confirmButton = { TextButton(onClick = { ui.chooseProfile = false }) { Text("Отмена") } })
     val context = androidx.compose.ui.platform.LocalContext.current
     val debug by Session.debugDetails.collectAsState()
     val status = LocalStatusColors.current
@@ -245,6 +268,11 @@ fun TargetScreen(
             OutlinedButton(onClick = onRefresh, enabled = ui.connected && !ui.busy) { Text("Обновить") }
         }
 
+        SectionCard("Профиль MCU") {
+            Text(ui.profileLabel)
+            OutlinedButton(onClick = { ui.chooseProfile = true }, enabled = ui.connected && !ui.busy) { Text("Выбрать профиль…") }
+            Text("Ручной профиль задаёт проверки чтением, но не разрешает прошивку неизвестного MCU. Сбрасывается при отключении.", style = MaterialTheme.typography.bodySmall)
+        }
         SectionCard("Управление") {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Доступ", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)

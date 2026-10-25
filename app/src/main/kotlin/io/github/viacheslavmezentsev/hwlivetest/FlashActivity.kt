@@ -538,8 +538,8 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
     /** ТЗ прошивки 5.2.4: самостоятельная копия без остановки ядра и разрешения записи. */
     private fun askBackupFile() {
         if (Session.stlink == null || ui.busy) return
-        if (Session.target?.flashSizeKb == null) {
-            ui.status = "Размер Flash неизвестен — резервная копия недоступна."
+        if (Session.target?.flashSizeKb == null || Session.target?.profile?.stm32Layout != true) {
+            ui.status = "Карта или размер Flash неизвестны — полная резервная копия недоступна."
             ui.error = true
             return
         }
@@ -550,7 +550,7 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
     private fun backupAll(uri: Uri) {
         val st = Session.stlink
         val kb = Session.target?.flashSizeKb
-        if (st == null || kb == null || kb <= 0) {
+        if (st == null || kb == null || kb <= 0 || Session.target?.profile?.stm32Layout != true) {
             ui.status = "Для копии нужны подключение и известный размер Flash."
             ui.error = true
             return

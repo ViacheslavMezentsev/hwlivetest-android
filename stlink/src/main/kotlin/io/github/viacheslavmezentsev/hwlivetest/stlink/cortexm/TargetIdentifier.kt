@@ -25,13 +25,16 @@ data class TargetInfo(
     val flashSizeAddress: Long?,
     val flashSizeKb: Int?,
     val notes: List<String>,
+    val profileOverride: McuProfile? = null,
 ) {
+    val profile: McuProfile get() = profileOverride ?: McuProfile.forTarget(this)
+
     /** Размер SRAM, если известен по справочнику (только STM32). */
     val sramKb: Int? get() = stm32Part?.sramKb
 
     /** Короткое имя для строки состояния: серия STM32 или семейство. */
     val shortName: String
-        get() = stm32Part?.name ?: vendor.title
+        get() = stm32Part?.name ?: if (vendor == McuVendor.UNKNOWN) cpuId?.core?.title ?: vendor.title else vendor.title
 
     /** Строки для экрана и журнала: «параметр — значение». */
     fun summary(): List<Pair<String, String>> = buildList {
@@ -45,6 +48,7 @@ data class TargetInfo(
             add("ROM part" to "${it.partNo.hex12()} rev ${it.revision}")
         }
         add("Семейство" to vendor.title)
+        add("Профиль" to (profile.title + if (profileOverride != null) " (выбран вручную)" else " (автоматически)"))
         if (idRegisterAddress != null && idRegister != null) {
             val label = if (vendor == McuVendor.AT32) "PID" else "DBGMCU"
             add(label to "${idRegister.hex32()} @ ${idRegisterAddress.hex32()}")
@@ -87,7 +91,13 @@ class TargetIdentifier(private val mem: DebugMemory) {
         // DBGMCU_IDCODE / DEBUG_IDCODE
         var idAddress: Long? = null
         var idValue: Int? = null
-        for (addr in Stm32.dbgmcuCandidates(core)) {
+        // ТЗ ST-Link 5.13: известный сторонний разработчик — только общие регистры.
+        val foreignDesigner = romValid && rom?.designer?.name != null &&
+            rom.designer != Jep106.ST && rom.designer != Jep106.ARM
+        val candidates = if (foreignDesigner) emptyList() else Stm32.dbgmcuCandidates(core).filter {
+            it >= 0xE0000000L || (romValid && rom?.designer == Jep106.ST)
+        }
+        for (addr in candidates) {
             val v = attempt(notes, "ID ${addr.hex32()}") { mem.read32(addr) } ?: continue
             if (v != 0 && v != -1) {
                 idAddress = addr

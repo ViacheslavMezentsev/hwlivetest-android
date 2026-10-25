@@ -14,6 +14,7 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.StLinkException
 import io.github.viacheslavmezentsev.hwlivetest.stlink.TargetWrite
 import io.github.viacheslavmezentsev.hwlivetest.stlink.WritePermit
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.TargetIdentifier
+import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.McuProfile
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.TargetInfo
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.AddressesFile
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.Field
@@ -79,9 +80,10 @@ object Session {
     /** Вызывается только в worker: повторный запрос не закрывает действующее соединение. */
     fun ensureConnected(usb: StLinkUsb, d: StLinkDevice): TargetInfo {
         check(device?.sameAs(d.device) == true) { "Адаптер изменился или отключён. Повторите подключение." }
-        return reusableConnection.getOrOpen(d.device.deviceName,
+        val connected = reusableConnection.getOrOpen(d.device.deviceName,
             reusable = route.value.ready && stlink != null && target != null && usb.hasPermission(d),
         ) { connectBlocking(usb, d) }
+        return target ?: connected
     }
 
     val log = SessionLog()
@@ -113,6 +115,18 @@ object Session {
     @Volatile
     var target: TargetInfo? = null
         private set
+
+    /** ТЗ ST-Link 5.13: профиль действует только на текущее подключение и чтение. Worker only. */
+    fun applyProfile(profile: McuProfile?) {
+        val current = target ?: return
+        stopPolling()
+        sampler?.clear()
+        lastReport = null
+        target = current.copy(profileOverride = profile)
+        targetText = Format.target(target!!)
+        userSaid("профиль MCU: " + (profile?.title ?: "автоматический"))
+        notifyChanged()
+    }
 
     /** Тексты блоков экрана эксперта, чтобы восстановить их после поворота. */
     @Volatile
@@ -199,7 +213,7 @@ object Session {
 
     /** Проверка адреса поля по размерам Flash/SRAM опознанного MCU. */
     fun check(field: Field): MemoryMap.Check =
-        MemoryMap.check(field.address, target?.flashSizeKb, target?.sramKb)
+        MemoryMap.check(field.address, target?.flashSizeKb, target?.sramKb, target?.profile?.stm32Layout == true)
 
     // ---------- Подключение (только в потоке worker) ----------
 
@@ -347,6 +361,7 @@ object Session {
                 .filter { check(it).readable }.map { it.topic }
             try {
                 val t = SystemClock.elapsedRealtime()
+                s.groupReads = target?.profile?.stm32Layout == true
                 val r = s.sample(nowMs(), readBlock = { a, n -> st.readBlock(a, n) }, only = readable, isFatal = ::isFatal)
                 lastPollMs = SystemClock.elapsedRealtime() - t
                 recording?.write(System.currentTimeMillis() * 1_000_000L, r)

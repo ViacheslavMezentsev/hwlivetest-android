@@ -29,11 +29,12 @@ class Diagnostics(
     private val progress: (done: Int, total: Int, title: String) -> Unit = { _, _, _ -> },
 ) {
     private val core: CortexCore? = target.cpuId?.core
+    private val profile = target.profile
     private val baseline: Boolean = core?.isBaseline ?: false
 
     val family: Stm32Clocks.Family? = when {
-        target.vendor != McuVendor.STM32 && target.vendor != McuVendor.STM32_COMPATIBLE -> null
-        else -> when (target.stm32Part?.family) {
+        !profile.peripheralDiagnostics -> null
+        else -> when (profile.diagnosticFamily) {
             Stm32.Family.F1 -> Stm32Clocks.Family.F1
             Stm32.Family.F4 -> Stm32Clocks.Family.F4
             Stm32.Family.G4 -> Stm32Clocks.Family.G4
@@ -101,6 +102,8 @@ class Diagnostics(
                 }
             }
         }
+        f += Finding(Level.INFO, "Профиль: ${profile.title}",
+            if (target.profileOverride != null) "Выбран пользователем; совместимость и размеры памяти не подтверждены автоматически." else "Выбран автоматически по результатам опознания.")
         val name = target.shortName
         f += if (target.cpuId != null) {
             Finding(Level.OK, "MCU отвечает по SWD: $name, ${target.cpuId?.coreName}")
@@ -186,8 +189,8 @@ class Diagnostics(
                 f += Finding(Level.INFO, "Активные исключения: " + active.distinct().joinToString { exceptionName(it) })
             }
         }
-        if (baseline) {
-            f += Finding(Level.SKIP, "Регистров CFSR/HFSR у ${core?.title ?: "этого ядра"} нет")
+        if (baseline || core == null) {
+            f += Finding(Level.SKIP, "CFSR/HFSR не проверяются для ${core?.title ?: "неопознанного ядра"}")
             return Section("Исключения и сбои", f)
         }
         val cfsr = rd(CFSR)
@@ -212,7 +215,7 @@ class Diagnostics(
     }
 
     private fun pcSection(): Section {
-        if (baseline) return Section("Где выполняется код", listOf(Finding(Level.SKIP, "У ${core?.title} нет DWT_PCSR")))
+        if (core !in listOf(CortexCore.M3, CortexCore.M4, CortexCore.M7)) return Section("Где выполняется код", listOf(Finding(Level.SKIP, "Выборка PC не поддержана для ${core?.title ?: "неопознанного ядра"}")))
         val demcr = rd(DEMCR) ?: return Section("Где выполняется код", listOf(Finding(Level.WARN, "DEMCR не читается")))
         if (!bit(demcr, 24)) {
             return Section(
@@ -236,13 +239,16 @@ class Diagnostics(
             "Flash" -> Finding(Level.OK, "PC в Flash: работает прошивка", "${pcs.size} выборок, $range")
             "системная память" -> Finding(Level.WARN, "PC в системной памяти: работает встроенный загрузчик ST", "Обычно это BOOT0 = 1. $range")
             "SRAM" -> Finding(Level.INFO, "PC в SRAM: код выполняется из ОЗУ", range)
-            else -> Finding(Level.WARN, "PC в области «$main»", range)
+            else -> Finding(if (profile.stm32Layout) Level.WARN else Level.INFO, "PC в области «$main»", range)
         }
         if (pcs.distinct().size == 1) f += Finding(Level.INFO, "PC не меняется (${pcs[0].hex32()}): цикл ожидания или WFI")
         return Section("Где выполняется код", f)
     }
 
     private fun firmware(): Section {
+        // ТЗ ST-Link 5.13: неизвестная карта не означает пустую Flash.
+        if (!profile.stm32Layout) return Section("Прошивка", listOf(Finding(Level.SKIP,
+            "Карта Flash не определена", "Общий профиль Cortex-M: начало Flash, размер и загрузочная схема не предполагаются. Доступно чтение сигналов по адресам из файла.")))
         val f = mutableListOf<Finding>()
         val sp = rd(FLASH_BASE)
         val reset = rd(FLASH_BASE + 4)
@@ -397,6 +403,12 @@ class Diagnostics(
         }
         val ticking = c1 != null && c2 != null && c1 != c2
         val reload = (rvr.toLong() and 0xFFFFFF) + 1
+        if (!profile.peripheralDiagnostics) {
+            f += Finding(if (ticking) Level.OK else Level.INFO,
+                if (ticking) "SysTick идёт" else "Движение SysTick не обнаружено",
+                "RVR + 1 = $reload; источник: ${if (bit(csr, 2)) "тактовая частота ядра" else "внешний опорный сигнал"}. Период тика и частота источника неизвестны.")
+            return null
+        }
         val est = reload * 1000.0 * if (bit(csr, 2)) 1 else 8
         f += Finding(
             if (ticking) Level.OK else Level.WARN,
@@ -417,6 +429,11 @@ class Diagnostics(
     }
 
     private fun region(a: Long): String {
+        if (!profile.stm32Layout) return when (a) {
+            in 0L..0x1FFFFFFFL -> "область кода (тип памяти неизвестен)"
+            in 0x20000000L..0x3FFFFFFFL -> "область SRAM (размер неизвестен)"
+            else -> a.hex32()
+        }
         val flashEnd = FLASH_BASE + (target.flashSizeKb ?: 2048) * 1024L
         val sramEnd = 0x20000000L + (target.sramKb?.let { it * 1024L + 4 } ?: 0x00100000L)
         val sys = family?.let { systemMemory(it) }

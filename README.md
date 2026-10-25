@@ -74,6 +74,11 @@ sigrok-cli на компьютере), делает пробный захват 
 регистры периферии отмечаются предупреждением, но не блокируются. Последний открытый
 файл запоминается.
 
+## Сайт и релизы
+
+[GitHub Pages](https://viacheslavmezentsev.github.io/hwlivetest-android/) ·
+[описания релизов](docs/releases/README.md) · [настройка публикации сайта](docs/pages.md).
+
 ## Сборка
 
 Нужны JDK 17+ и Android SDK (проще всего — Android Studio).

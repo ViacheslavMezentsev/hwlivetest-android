@@ -150,4 +150,34 @@ class TargetIdentifierTest {
         assertEquals(0xABCD, mem.read16(0x1FFF7A20L))
         assertEquals(0x0200, mem.read16(0x1FFF7A22L))
     }
+
+    @Test
+    fun knownForeignDesignerDoesNotProbeStm32Registers() {
+        val memory = FakeMemory(romWords(0x123, Jep106(2, 0x44)) + mapOf(
+            CpuId.ADDRESS to 0x410FC241,
+            0xE0042000L to 0x10006431,
+        ))
+        val info = TargetIdentifier(memory).identify()
+        assertEquals(McuVendor.UNKNOWN, info.vendor)
+        assertEquals(McuProfile.GENERIC, info.profile)
+        assertEquals("Cortex-M4", info.shortName)
+        assertFalse(memory.reads.contains(0xE0042000L))
+    }
+
+    @Test
+    fun unknownBaselineNeverProbesPeripheralIdAddress() {
+        val memory = FakeMemory(mapOf(CpuId.ADDRESS to 0x410CC601))
+        TargetIdentifier(memory).identify()
+        assertFalse(memory.reads.contains(0x40015800L))
+    }
+
+    @Test
+    fun knownPartUsesFixedProfileWithoutInventingMemorySize() {
+        val info = TargetIdentifier(FakeMemory(romWords(0x431, Jep106.ST) + mapOf(
+            CpuId.ADDRESS to 0x410FC241, 0xE0042000L to 0x10006431,
+        ))).identify()
+        assertEquals("stm32-431", info.profile.id)
+        assertEquals(Stm32.Family.F4, info.profile.diagnosticFamily)
+        assertNull(info.flashSizeKb)
+    }
 }
