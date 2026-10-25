@@ -44,7 +44,7 @@ class RttImageBuilderTest {
     }
 
     @Test fun supportedRatesHaveExactTimerDivisors() {
-        for (clock in listOf(16_000_000L, 84_000_000L, 100_000_000L)) {
+        for (clock in listOf(16_000_000L, 24_000_000L, 72_000_000L, 84_000_000L, 100_000_000L, 168_000_000L, 180_000_000L)) {
             for (rate in RttImageBuilder.sampleRates) {
                 val b = RttImageBuilder.build(0x2001DE00, 6656, listOf(0x20000000L),
                     0x20004750, 412, RttDoctor.timers.first(), clock, rate)
@@ -77,4 +77,15 @@ class RttImageBuilderTest {
         rejected { build(emptyList()) }
         rejected { build(List(7) { 0x20000000 }) }
     }
+    @Test fun f1ShortVectorsAndExtendedF4Sram() {
+        val f1 = RttImageBuilder.build(0x20002000, 0x2800, listOf(0x20000000L),
+            0x20000004, 236, RttDoctor.timers.first(), 72_000_000, 1000, 0x20005000)
+        assertTrue(f1.image.base + f1.image.bytes.size <= 0x20004800)
+        val f4 = RttImageBuilder.build(0x20040000, 0xF800, listOf(0x20030000L),
+            0x20000004, 432, RttDoctor.timers.first(), 180_000_000, 1000, 0x20050000)
+        assertTrue(f4.image.vectors >= 0x20040000)
+        rejected { RttImageBuilder.build(0x20002000, 0x2800, listOf(0x20000000L),
+            0x20000004, 236, RttDoctor.timers.last(), 72_000_000, 1000, 0x20005000) }
+    }
+
 }
