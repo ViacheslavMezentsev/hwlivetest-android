@@ -98,6 +98,7 @@ class RttDoctorActivity : ComponentActivity() {
         setContent { HwTheme {
             val route by Session.route.collectAsState()
             val debug by Session.debugDetails.collectAsState()
+            var showFields by remember { mutableStateOf(false) }
             LaunchedEffect(route) {
                 if (!route.ready || Session.stlink !== observedAdapter) { timers = ""; timing = "" }
             }
@@ -119,9 +120,9 @@ class RttDoctorActivity : ComponentActivity() {
                     OutlinedButton(enabled = !busy && !trialRunning, onClick = { openElf.launch(arrayOf("*/*")) }) {
                         Text(if (selectedElf == null) "Выбрать ELF прошивки" else "Заменить ELF прошивки")
                     }
-                    if (selectedElf != null) Text("ELF выбран. Соответствие прошивке на плате нужно подтвердить самостоятельно.")
+                    if (selectedElf != null) Text("ELF выбран")
                     else if (memory.isNotEmpty()) Text(memory)
-                    Text("Эксперимент для STM32F411. Временно изменяет работу устройства; используйте испытательную плату.", style = MaterialTheme.typography.bodySmall)
+                    Text("Эксперимент · STM32F411", style = MaterialTheme.typography.bodySmall)
                 }
                 if (debug) {
                 SectionCard("Предлагаемые параметры пробы") {
@@ -151,8 +152,12 @@ class RttDoctorActivity : ComponentActivity() {
                 }
                 SectionCard("Сигналы и результат") {
                     val fields = RttTrial.fields()
-                    Text("В запись войдут первые ${fields.size} подходящих сигналов:")
-                    Text(fields.joinToString("\n") { if (debug) it.topic else it.shortName }.ifEmpty { "Загрузите таблицу на странице «Сигналы»." })
+                    Text("Сигналов для записи: ${fields.size}")
+                    if (fields.isEmpty()) Text("Загрузите таблицу на странице «Сигналы».")
+                    else if (!debug) TextButton(onClick = { showFields = !showFields }) {
+                        Text(if (showFields) "Скрыть сигналы" else "Показать сигналы")
+                    }
+                    if (debug || showFields) Text(fields.joinToString("\n") { if (debug) it.topic else it.shortName })
                     if (!Session.writeMode) Text("Включите «Доступ» на странице «Устройство».")
                     if (Session.recording != null) Text("Сначала остановите текущую запись.")
                     Button(enabled = !busy && !trialRunning && Session.recording == null && route.ready && Session.writeMode && selectedElf != null && fields.isNotEmpty(),
