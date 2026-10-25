@@ -15,13 +15,14 @@ class RttTrial {
     @Volatile private var running: RttSession? = null
     fun cancel() { cancelled.set(true); running?.cancel() }
 
-    fun run(elf: ElfFile, fields: List<Field>, directory: File): String {
-        val report = JSONObject().put("version", BuildConfig.VERSION_NAME).put("sample_hz", 100)
+    fun run(elf: ElfFile, fields: List<Field>, directory: File, sampleHz: Int = 100): String {
+        val report = JSONObject().put("version", BuildConfig.VERSION_NAME).put("sample_hz", sampleHz)
             .put("fields", JSONArray(fields.map { JSONObject().put("topic", it.topic).put("address", it.address).put("kind", it.kind.key) }))
         var reportFile: File? = null
         var message: String
         var summary: String
         try {
+            require(sampleHz in RttImageBuilder.sampleRates)
             check(!cancelled.get()) { "Отменено до установки" }
             check(Session.recording == null) { "Сначала остановите текущую запись" }
             val adapter = Session.stlink ?: error("Адаптер отключён")
@@ -46,11 +47,13 @@ class RttTrial {
             val vector = listOf(".isr_vector", ".vectors", ".vector_table", ".intvec", ".vectors_flash")
                 .mapNotNull { elf.section(it) }.firstOrNull { it.address == 0x08000000L }
                 ?: error("Таблица векторов не найдена")
-            val built = RttImageBuilder.build(a.base, a.available, fields.map { it.address }, tick, vector.size, timer, hz)
+            val built = RttImageBuilder.build(a.base, a.available, fields.map { it.address }, tick, vector.size, timer, hz, sampleHz)
             check(directory.isDirectory || directory.mkdirs()) { "Не удалось создать папку отчётов" }
             val stem = "trial-${System.currentTimeMillis()}"
             reportFile = File(directory, "$stem.json")
             report.put("timer", timer.name).put("base", a.base).put("image_bytes", built.image.bytes.size)
+                .put("timer_prescaler", built.image.prescaler).put("timer_reload", built.image.reload)
+                .put("buffer_bytes", built.bufferBytes).put("drain_interval_ms", 10)
                 .put("timer_clock_hz", hz).put("tick_address", tick).put("status", "prepared")
                 .put("resources_assumed_free", true).put("elf_matches_firmware", JSONObject.NULL)
             reportFile.writeText(report.toString(2))
@@ -89,8 +92,10 @@ class RttTrial {
                 .put("recovery_error", result.recovery?.error ?: JSONObject.NULL)
                 .put("error", result.error ?: JSONObject.NULL).put("close_error", result.closeError ?: JSONObject.NULL)
             summary = (if (result.reason == "cancelled") "Проба остановлена." else if (result.ok) "Проба завершена." else "Проба завершилась с ошибкой.") +
-                " Получено ${stats.frames} кадров." +
-                (measuredHz?.let { " %.1f Гц.".format(java.util.Locale.ROOT, it) } ?: "") +
+                " Получено ${stats.frames} кадров; задано $sampleHz Гц." +
+                (measuredHz?.let { " Получено %.1f Гц.".format(java.util.Locale.ROOT, it) } ?: "") +
+                " Пропуски по seq: ${stats.missingEstimate}." +
+                (if (stats.duplicates > 0 || stats.discardedBytes > 0 || stats.tickBackwards > 0 || stats.sequenceDiscontinuities > 0) " Есть нарушения потока — подробности в отчёте." else "") +
                 (if (result.recovery?.ok == true) " Восстановление подтверждено." else " Восстановление не подтверждено — проверьте устройство.")
             message = "Кадров: ${stats.frames}; пропуски seq: ${stats.missingEstimate}.\n" +
                 (measuredHz?.let { "Частота по tick: %.1f Гц.\n".format(java.util.Locale.ROOT, it) } ?: "") +

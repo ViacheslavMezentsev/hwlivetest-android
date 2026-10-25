@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Row
+import io.github.viacheslavmezentsev.hwlivetest.firmware.RttImageBuilder
 import androidx.compose.runtime.*
 import io.github.viacheslavmezentsev.hwlivetest.firmware.ElfFile
 import io.github.viacheslavmezentsev.hwlivetest.firmware.RttElfAdvice
@@ -22,6 +24,7 @@ class RttDoctorActivity : ComponentActivity() {
         @Volatile private var symbols: RttElfSymbols.Symbols? = null
         private var memory by mutableStateOf("")
         private var busy by mutableStateOf(false)
+        private var sampleHz by mutableStateOf(100)
         private var trial: RttTrial? = null
         private var trialRunning by mutableStateOf(false)
         private var trialResult by mutableStateOf("")
@@ -106,7 +109,7 @@ class RttDoctorActivity : ComponentActivity() {
             }
             if (confirmTrial) AlertDialog(
                 onDismissRequest = { confirmTrial = false },
-                title = { Text("Проба RTT на 5 секунд?") },
+                title = { Text("Проба RTT · $sampleHz Гц · 5 секунд?") },
                 text = { Text(if (!debug) "На 5 секунд будет включён экспериментальный сбор сигналов. Он временно меняет работу платы и может конфликтовать с прошивкой. После остановки приложение проверит восстановление. Не отключайте USB до завершения." else "Поля перечислены в разделе пробы. SRAM и таймер считаются предположительно свободными по ELF и регистрам. " +
                     "Это не исключает конфликта с кучей, стеком или будущей работой прошивки. " +
                     "Ядро временно останавливается; Flash не меняется. После пробы выполняется восстановление. " +
@@ -116,7 +119,7 @@ class RttDoctorActivity : ComponentActivity() {
             )
             HwScreen("Проба RTT", onBack = { if (trialRunning) trial?.cancel() else finish() },
                 navigationEnabled = !trialRunning && !busy, keepAwake = trialRunning) {
-                SectionCard("Запись сигналов · 100 Гц · 5 секунд") {
+                SectionCard("Запись сигналов · $sampleHz Гц · 5 секунд") {
                     Text("Выберите ELF текущей прошивки и запустите пробу. Проверки выполнятся автоматически.")
                     if (!route.ready) Text("Сначала подключите плату на странице «Устройство».")
                     OutlinedButton(enabled = !busy && !trialRunning, onClick = { openElf.launch(arrayOf("*/*")) }) {
@@ -124,11 +127,23 @@ class RttDoctorActivity : ComponentActivity() {
                     }
                     if (selectedElf != null) Text("ELF выбран")
                     else if (memory.isNotEmpty()) Text(memory)
+                    Row {
+                        RttImageBuilder.sampleRates.forEach { rate ->
+                            FilterChip(selected = sampleHz == rate, enabled = !busy && !trialRunning,
+                                onClick = {
+                                    if (sampleHz != rate) {
+                                        sampleHz = rate
+                                        Session.userSaid("выбрал частоту пробы RTT: $rate Гц")
+                                    }
+                                }, label = { Text("$rate Гц") })
+                        }
+                    }
+                    if (sampleHz > 100) Text("Экспериментальная частота. После пробы проверьте пропуски и восстановление.", style = MaterialTheme.typography.bodySmall)
                     Text("Эксперимент · STM32F411", style = MaterialTheme.typography.bodySmall)
                 }
                 if (debug) {
                 SectionCard("Предлагаемые параметры пробы") {
-                    Text("Выборка: 100 Гц · буфер: 4 КиБ")
+                    Text("Выборка: $sampleHz Гц · буфер: 4 КиБ")
                     Text("Чтение буфера телефоном: каждые 10 мс")
                     Text("Таймер: первый кандидат из TIM2–TIM5. SRAM: окно по выбранному ELF.", style = MaterialTheme.typography.bodySmall)
                     Text("Предполагаемые свободные ресурсы. Короткая проба работает отдельно от обычного SWD-опроса.", style = MaterialTheme.typography.bodySmall)
@@ -189,15 +204,16 @@ class RttDoctorActivity : ComponentActivity() {
         }
         val elf = selectedElf ?: return
         val fields = RttTrial.fields()
+        val rate = sampleHz
         val runner = RttTrial()
         trial = runner
         busy = true; trialRunning = true; trialResult = "Проба выполняется; затем — восстановление устройства…"
         trialSummary = "Запись и восстановление выполняются…"
-        Session.userSaid("подтвердил короткую пробу RTT: 100 Гц, 5 секунд")
+        Session.userSaid("подтвердил короткую пробу RTT: $rate Гц, 5 секунд")
         Session.stopPolling()
         val directory = java.io.File(getExternalFilesDir(null) ?: filesDir, "rtt")
         Session.worker.execute {
-            val result = runner.run(elf, fields, directory)
+            val result = runner.run(elf, fields, directory, rate)
             runOnUiThread { trialResult = result; trialSummary = RttTrial.lastSummary; busy = false; trialRunning = false; trial = null }
         }
     }

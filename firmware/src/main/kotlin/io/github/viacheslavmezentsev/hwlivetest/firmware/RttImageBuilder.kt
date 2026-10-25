@@ -3,8 +3,9 @@ package io.github.viacheslavmezentsev.hwlivetest.firmware
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.RttDoctor
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.RttInstaller
 
-/** ТЗ RTT 2.9. F411 short trial, 100 Hz; only aligned SRAM words. */
+/** ТЗ RTT 2.9, 2.11. F411 short trial, selectable sample rate; only aligned SRAM words. */
 object RttImageBuilder {
+    val sampleRates = listOf(100, 500, 1000)
     data class Built(val image: RttInstaller.Image, val control: Long, val buffer: Long,
         val bufferBytes: Int, val counters: Long)
 
@@ -16,10 +17,11 @@ object RttImageBuilder {
         .chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     fun build(base: Long, available: Long, fields: List<Long>, tick: Long, vectorBytes: Int,
-        timer: RttDoctor.Timer, clockHz: Long): Built {
+        timer: RttDoctor.Timer, clockHz: Long, sampleHz: Int = 100): Built {
+        require(sampleHz in sampleRates) { "Выберите 100, 500 или 1000 Гц" }
         require(fields.size in 1..6 && timer in RttDoctor.timers)
         require(base % 16 == 0L && available > 0 && base >= 0x20000000 && base + available <= 0x20020000)
-        require(clockHz in 200..100_000_000 && clockHz % 100 == 0L)
+        require(clockHz in 200..100_000_000 && clockHz % sampleHz == 0L)
         val layout = RttReferenceLayout.calculate(base, fields.size, vectorBytes)
         require(layout.bytes <= available) { "Образ RTT не помещается до запаса стека" }
         val end = base + layout.bytes
@@ -28,9 +30,9 @@ object RttImageBuilder {
                 "RTT допускает только выровненные слова SRAM вне образа"
             }
         }
-        val divider = clockHz / 100
+        val divider = clockHz / sampleHz
         val psc = (1L..65536).firstOrNull { divider % it == 0L && divider / it in 2..65536 }
-            ?: error("Нельзя получить ровно 100 Гц")
+            ?: error("Нельзя получить ровно $sampleHz Гц")
         val buffer = base + 48
         val counters = buffer + layout.bufferBytes
         val table = counters + 16

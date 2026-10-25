@@ -43,6 +43,26 @@ class RttImageBuilderTest {
         }
     }
 
+    @Test fun supportedRatesHaveExactTimerDivisors() {
+        for (clock in listOf(16_000_000L, 84_000_000L, 100_000_000L)) {
+            for (rate in RttImageBuilder.sampleRates) {
+                val b = RttImageBuilder.build(0x2001DE00, 6656, listOf(0x20000000L),
+                    0x20004750, 412, RttDoctor.timers.first(), clock, rate)
+                assertEquals(clock, (b.image.prescaler + 1L) * (b.image.reload + 1L) * rate)
+                assertTrue(b.image.prescaler in 0..65535)
+                assertTrue(b.image.reload in 1..65535)
+                assertEquals(build().image.bytes.toList(), b.image.bytes.toList())
+            }
+        }
+    }
+
+    @Test fun rejectsUnsupportedRateAndFractionalClock() {
+        for ((clock, rate) in listOf(100_000_000L to 0, 100_000_000L to 2000, 99_999_999L to 1000)) {
+            rejected { RttImageBuilder.build(0x2001DE00, 6656, listOf(0x20000000L),
+                0x20004750, 412, RttDoctor.timers.first(), clock, rate) }
+        }
+    }
+
     private fun rejected(block: () -> Unit) {
         try { block(); fail("Expected rejection") } catch (_: IllegalArgumentException) { }
     }
