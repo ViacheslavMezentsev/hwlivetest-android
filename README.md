@@ -4,7 +4,8 @@
 Подключение по USB OTG, без Termux, OpenOCD и GDB. Протокол реализован на Kotlin.
 
 [Сайт](https://viacheslavmezentsev.github.io/hwlivetest-android/) ·
-[Релизы и APK](https://github.com/ViacheslavMezentsev/hwlivetest-android/releases)
+[Релизы и APK](https://github.com/ViacheslavMezentsev/hwlivetest-android/releases) ·
+[История изменений](CHANGELOG.md)
 
 ## Быстрый старт
 
@@ -20,7 +21,8 @@
 - Опознание Cortex-M, диагностика ядра, исключений и сбоев; профили MCU.
 - Резервная копия Flash, сверка HEX/ELF, прошивка и стирание поддерживаемых STM32F1/F4.
 - Живые сигналы, выбор каналов, масштабирование графиков и запись MCAP (ROS 1).
-- Запись RTT для поддержанных STM32F1/F4: 100/500/1000 Гц, запуск и остановка с графика.
+- Выбор метода записи: SWD 1–20 Гц или RTT 100/500/1000 Гц для поддерживаемых STM32F1/F4.
+  Запуск и остановка с графика; для RTT нужны ELF текущей прошивки и свободные ресурсы MCU.
 - Общее подключение между экранами, журнал действий и трафик ST-Link.
 
 По умолчанию — чтение. Управление ядром и изменение Flash требуют включения доступа.
@@ -32,7 +34,7 @@ Option bytes и RDP не изменяются. Состав диагностик
 - [Практический пример addresses.json](docs/usage.md#пример-addressesjson) ·
   [спецификация формата](docs/addresses-json.md).
 - [Эвристики диагностики](docs/heuristics.md) · [архитектура](docs/architecture.md).
-- [Состояние локальных экспериментов: SWD, RTT, J-Link](docs/polling-experiments.md).
+- [Проверки SWD/RTT и план поддержки J-Link](docs/polling-experiments.md).
 - [Описания релизов](docs/releases/README.md) · [планы — TODO](TODO.md).
 
 ## Сборка

@@ -41,9 +41,10 @@
 <article><h3>Сигналы</h3><p>Живые значения, индикаторы чтения, графики за 30 секунд, минуту или пять минут и запись MCAP.</p></article>
 <article><h3>Журнал</h3><p>Действия, ответы устройства и история операций. Подробности обмена доступны в отладочных настройках.</p></article>
 </div></section>
-<section id="experiments"><h2>Локальные эксперименты</h2>
-<p>Запись поддерживает прямое чтение SWD (1–20 Гц) и RTT с таймером (100/500/1000 Гц) для поддержанных STM32F1/F4. Метод и общий ползунок частоты находятся в настройках (SWD: 10 Гц по умолчанию, RTT: 100 Гц). RTT доступен только для совместимого подключённого устройства, подготовка ELF открывается там же; запись запускается и останавливается на графике. После остановки RTT восстанавливается состояние устройства и формируется MCAP. На F411 проверены 21 235 кадров при 1000 Гц без потерь, MCAP совпал с исходным потоком, восстановление подтверждено. Остальные профили проверены программными тестами; STM32F410 пока исключён. Нужны ELF текущей прошивки, свободные SRAM и таймер. При обрыве USB восстановление не гарантируется. Функция доступна в локальной версии 0.3.29; опубликованный APK может отставать.</p>
-<p>Эти изменения проходят локальные проверки и могут отсутствовать в опубликованном APK. <a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/polling-experiments.md">Состояние экспериментов</a> · <a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/usage.md">Руководство</a></p>
+<section id="experiments"><h2>Запись SWD и RTT</h2>
+<p>В настройках выберите метод и частоту: прямое чтение SWD — 1–20 Гц (по умолчанию 10), RTT с таймером — 100/500/1000 Гц (по умолчанию 100). На графике выберите каналы и нажмите «Запись», затем «Остановить». Длительность и объём отображаются в шапке.</p>
+<p>RTT доступен для поддерживаемых автоматически опознанных STM32F1/F4, кроме F410. Нужны ELF текущей прошивки, свободные SRAM и таймер, включённый «Доступ». После остановки восстанавливается состояние устройства и формируется MCAP. При обрыве USB восстановление не гарантируется. Аппаратно проверен F411; остальные профили проверены программными тестами.</p>
+<p>Маршрут описан для версии 0.3.29. <a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/usage.md#запись-rtt">Руководство</a> · <a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/polling-experiments.md">Результаты проверок</a></p>
 </section>
 <section id="install"><h2>Установка</h2><ol>
 <li>Откройте <a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/releases">релизы</a> и скачайте приложенный APK.</li>
@@ -52,7 +53,7 @@
 <li>Нажмите «Проверить плату» или откройте экспертный режим — вкладку «Устройство».</li>
 </ol><p class="note">По умолчанию приложение только читает. Запись, стирание и управление ядром доступны после явного включения доступа. Быстрые действия настраиваются отдельно.</p></section>
 </div><aside>
-<section class="panel"><h2>Версии</h2><p>Изменения каждой версии хранятся рядом с исходным кодом.</p><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/tree/main/docs/releases">Описания релизов →</a><hr><p class="muted">Проверенный APK прикладывается к GitHub Release после публикации тега владельцем.</p></section>
+<section class="panel"><h2>Версии</h2><p>История изменений и ограничения выпусков собраны в CHANGELOG.</p><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/CHANGELOG.md">История изменений →</a><hr><p class="muted">Проверенный APK прикладывается к GitHub Release после публикации тега.</p></section>
 <section class="panel"><h2>Документация</h2><ul class="links">
 <li><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/heuristics.md">Проверки устройства →</a></li>
 <li><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/architecture.md">Архитектура →</a></li>
