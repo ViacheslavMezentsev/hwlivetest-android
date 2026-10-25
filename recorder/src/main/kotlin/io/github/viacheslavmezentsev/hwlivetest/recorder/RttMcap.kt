@@ -10,11 +10,12 @@ object RttMcap {
     const val TICK = "/_diag/rtt/tick_ms"
     data class Result(val frames: Long, val messages: Long, val pendingBytes: Int)
 
-    fun convert(input: InputStream, output: OutputStream, fields: List<Field>, firstFrameWallMs: Long): Result {
+    fun convert(input: InputStream, output: OutputStream, fields: List<Field>, firstFrameWallMs: Long, onProgress: (Long) -> Unit = {}): Result {
         require(fields.size in 1..6 && fields.map { it.topic }.distinct().size == fields.size)
         require(fields.none { it.topic == SEQ || it.topic == TICK }) { "Reserved RTT topic" }
         require(firstFrameWallMs in 0..Long.MAX_VALUE / 1_000_000)
         val decoder = RttFrameDecoder(fields.size)
+        var convertedFrames = 0L
         var previousTick: Long? = null
         var elapsed = 0L
         var result: Result? = null
@@ -32,6 +33,8 @@ object RttMcap {
                 val n = input.read(bytes)
                 if (n < 0) break
                 for (frame in decoder.feed(bytes.copyOf(n))) {
+                    convertedFrames++
+                    if (convertedFrames % 4096 == 0L) onProgress(convertedFrames)
                     previousTick?.let {
                         val delta = (frame.tickMs - it) and 0xFFFFFFFFL
                         check(delta < 0x80000000L) { "RTT tick moved backwards" }

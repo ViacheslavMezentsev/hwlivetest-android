@@ -10,6 +10,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.compose.material3.*
+import android.provider.DocumentsContract
+import java.io.File
+import io.github.viacheslavmezentsev.hwlivetest.telemetry.RttChartFeed
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import io.github.viacheslavmezentsev.hwlivetest.telemetry.Field
@@ -30,6 +34,9 @@ class ChartUi : ViewModel() {
     var error by mutableStateOf<String?>(null)
     var message by mutableStateOf("")
     var recording by mutableStateOf("")
+    var confirmRtt by mutableStateOf(false)
+    var rttRunner: RttTrial? = null
+    var resumePolling = false
     var recordBusy by mutableStateOf(false)
     var pollMs by mutableStateOf(0L)
     var pollingPeriodMs by mutableStateOf(100L)
@@ -84,7 +91,13 @@ class ChartActivity : ComponentActivity() {
         }
         if (ui.topics.isEmpty()) { finish(); return }
         applyTopics()
-        setContent { HwTheme { ChartScreen(ui, fields(), Session.fieldsFile?.fields.orEmpty(),
+        setContent { HwTheme {
+            if (ui.confirmRtt) AlertDialog(onDismissRequest = { ui.confirmRtt = false },
+                title = { Text("Начать запись RTT?") },
+                text = { Text("${RttDoctorActivity.sampleHz} Гц, ${fields().size} каналов, до ручной остановки. SRAM и таймер считаются свободными по ELF и текущему состоянию. Возможен конфликт с прошивкой. Ядро временно останавливается при установке и снятии заглушки. Flash не меняется. Не отключайте USB до завершения восстановления.") },
+                confirmButton = { TextButton(onClick = { ui.confirmRtt = false; startRtt() }) { Text("Начать запись") } },
+                dismissButton = { TextButton(onClick = { ui.confirmRtt = false }) { Text("Отмена") } })
+            ChartScreen(ui, fields(), Session.fieldsFile?.fields.orEmpty(),
             onBack = ::finish,
             onPollingHz = { hz ->
                 ui.pollingHz = PollingRate.clamp(hz)
@@ -95,7 +108,7 @@ class ChartActivity : ComponentActivity() {
             },
             onTopics = { topics -> Session.userSaid("применил каналы графика: " + topics.joinToString()); ui.topics = topics; applyTopics(); startPolling() },
             onPause = { Session.userSaid(if (ui.paused) "возобновил график" else "приостановил график (опрос и запись продолжаются)"); ui.paused = !ui.paused; ui.pausedAt = Session.nowMs(); refresh() },
-            onRecord = { Session.userSaid(if (Session.recording == null) "нажал «Запись»" else "нажал «Остановить» запись"); toggleRecording() },
+            onRecord = { Session.userSaid(if (Session.recording == null && ui.rttRunner == null) "нажал «Запись»" else "нажал «Остановить» запись"); toggleRecording() },
             onConnect = {
                 Session.userSaid("нажал «Подключить» на странице графика")
                 ui.connecting = true
@@ -145,7 +158,8 @@ class ChartActivity : ComponentActivity() {
 
     override fun onStop() {
         // ТЗ прошивки 5.21: закрыть файл в фоне; поворот сохраняет текущую запись.
-        if (!isChangingConfigurations && (Session.recording != null || ui.recordBusy)) stopRecording(showResult = !isFinishing, reason = "уход с экрана графика")
+        if (!isChangingConfigurations && ui.rttRunner != null) { ui.recordBusy = true; ui.rttRunner?.cancel() }
+        else if (!isChangingConfigurations && (Session.recording != null || ui.recordBusy)) stopRecording(showResult = !isFinishing, reason = "уход с экрана графика")
         super.onStop()
     }
 
@@ -162,6 +176,7 @@ class ChartActivity : ComponentActivity() {
     }
 
     private fun startPolling() {
+        if (Session.rttRecording != null) return
         ui.pollingHz = Prefs.pollingHz(this)
         ui.pollingPeriodMs = PollingRate.periodMs(ui.pollingHz)
         val current = ++generation
@@ -182,11 +197,12 @@ class ChartActivity : ComponentActivity() {
     }
 
     private fun refresh() {
+        if (resumed && ui.resumePolling && Session.rttRecording == null) { ui.resumePolling = false; startPolling() }
         if (ui.connected && !Session.route.value.ready) { ui.pausedAt = ui.now; ui.paused = true }
         ui.now = if (ui.paused) ui.pausedAt else Session.nowMs()
         ui.pollMs = Session.lastPollMs
         ui.connected = Session.route.value.ready
-        ui.recording = Session.recording?.let { it.name+", "+it.messages+" сообщ." } ?: ""
+        ui.recording = Session.recording?.let { it.name+", "+it.messages+" сообщ." } ?: ui.rttRunner?.progressText.orEmpty()
     }
 
     // ---------- MCAP ----------
@@ -203,12 +219,22 @@ class ChartActivity : ComponentActivity() {
 
     private fun toggleRecording() {
         if (ui.recordBusy) return
+        if (ui.rttRunner != null) { ui.recordBusy = true; ui.rttRunner?.cancel(); return }
         if (Session.recording != null) {
             stopRecording(showResult = true)
             return
         }
         if (Session.stlink == null) {
             ui.message = "Запись невозможна: нет подключения."
+            return
+        }
+        if (Prefs.recordRtt(this)) {
+            when {
+                !Session.writeAccess.value -> ui.message = "Включите «Доступ» в шапке графика."
+                RttDoctorActivity.selectedElf == null -> ui.message = "Выберите ELF в настройках → Настройка RTT."
+                fields().any { !RttTrial.eligible(it) } -> ui.message = "RTT поддерживает выровненные поля SRAM без битовых масок. Измените выбор каналов."
+                else -> withFolder("record") { ui.confirmRtt = true }
+            }
             return
         }
         withFolder("record") {
@@ -228,6 +254,64 @@ class ChartActivity : ComponentActivity() {
                 runOnUiThread { ui.recordBusy = false; refresh() }
             }
         }
+    }
+
+    // ТЗ RTT 2.13: graph owns the recording; worker always restores before conversion/export.
+    private fun startRtt() {
+        val elf = RttDoctorActivity.selectedElf ?: return
+        val tree = Recording.folder(this) ?: return
+        if (ui.rttRunner != null || Session.recording != null || Session.rttRecording != null) return
+        val fs = fields()
+        val rate = RttDoctorActivity.sampleHz
+        val runner = RttTrial()
+        ui.rttRunner = runner
+        Session.rttRecording = runner
+        ui.recordBusy = false
+        ui.message = ""
+        Session.userSaid("подтвердил запись RTT с графика: $rate Гц, ${fs.size} каналов, до ручной остановки")
+        Session.stopPolling()
+        val directory = File(getExternalFilesDir(null) ?: filesDir, "rtt")
+        val appContext = applicationContext
+        Session.worker.execute {
+            var saved: SavedRecording? = null
+            var message: String
+            try {
+                Session.sampler?.clear()
+                val feed = RttChartFeed(fs, { Session.sampler?.series(it) }, Session.nowMs())
+                runner.run(elf, fs, directory, rate, feed::accept)
+                feed.flush()
+                message = RttTrial.lastSummary
+                val report = RttTrial.lastReport
+                val mcap = report?.let { File(it.parentFile, it.nameWithoutExtension + ".mcap") }
+                if (mcap?.isFile == true) {
+                    val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+                    val name = Recording.fileName("hwlivetest_rtt")
+                    val uri = DocumentsContract.createDocument(appContext.contentResolver, parent, "application/octet-stream", name)
+                        ?: error("Не удалось создать MCAP в выбранной папке")
+                    try {
+                        appContext.contentResolver.openOutputStream(uri, "w")!!.use { out -> mcap.inputStream().use { it.copyTo(out) } }
+                    } catch (e: Exception) {
+                        runCatching { DocumentsContract.deleteDocument(appContext.contentResolver, uri) }
+                        throw e
+                    }
+                    val json = org.json.JSONObject(report.readText())
+                    saved = SavedRecording(uri, name, json.optLong("mcap_messages"), mcap.length(),
+                        if (json.optBoolean("restored") && json.optBoolean("capture_complete")) null else message)
+                }
+            } catch (e: Exception) {
+                message = "${RttTrial.lastSummary} Ошибка сохранения: ${e.message}. Исходные файлы доступны в настройках RTT."
+            } finally {
+                Session.rttRecording = null
+            }
+            handler.post {
+                ui.rttRunner = null
+                ui.recordBusy = false
+                ui.message = message
+                ui.saved = saved
+                ui.resumePolling = true
+            }
+        }
+        refresh()
     }
 
     private fun stopRecording(showResult: Boolean, reason: String = "по запросу пользователя") {

@@ -351,6 +351,7 @@ object Session {
 
     /** Идущая запись MCAP; пишется в потоке worker после каждого прохода опроса. */
     @Volatile
+    @Volatile var rttRecording: RttTrial? = null
     var recording: Recording? = null
 
     /**
@@ -366,6 +367,7 @@ object Session {
         onStopped: (String) -> Unit,
     ) {
         stopPolling()
+        if (rttRecording != null) return
         val s = sampler ?: return
         pollingActive = true
         val generation = pollingGeneration

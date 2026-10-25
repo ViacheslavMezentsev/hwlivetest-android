@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
 import androidx.compose.foundation.layout.Row
+import kotlinx.coroutines.delay
 import io.github.viacheslavmezentsev.hwlivetest.firmware.RttImageBuilder
 import androidx.compose.runtime.*
 import io.github.viacheslavmezentsev.hwlivetest.firmware.ElfFile
@@ -20,11 +21,11 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.*
 class RttDoctorActivity : ComponentActivity() {
     companion object {
         // ТЗ RTT 3.2: выбор ELF принадлежит сеансу, а не экземпляру Activity.
-        private var selectedElf by mutableStateOf<ElfFile?>(null)
+        internal var selectedElf by mutableStateOf<ElfFile?>(null)
         @Volatile private var symbols: RttElfSymbols.Symbols? = null
         private var memory by mutableStateOf("")
         private var busy by mutableStateOf(false)
-        private var sampleHz by mutableStateOf(100)
+        internal var sampleHz by mutableStateOf(100)
         private var trial: RttTrial? = null
         private var trialRunning by mutableStateOf(false)
         private var trialResult by mutableStateOf("")
@@ -103,24 +104,20 @@ class RttDoctorActivity : ComponentActivity() {
             val route by Session.route.collectAsState()
             val debug by Session.debugDetails.collectAsState()
             val access by Session.writeAccess.collectAsState()
+            LaunchedEffect(trialRunning) {
+                while (trialRunning) {
+                    trial?.let { trialSummary = it.progressText }
+                    delay(250)
+                }
+            }
             var showFields by remember { mutableStateOf(false) }
             LaunchedEffect(route) {
                 if (!route.ready || Session.stlink !== observedAdapter) { timers = ""; timing = "" }
             }
-            if (confirmTrial) AlertDialog(
-                onDismissRequest = { confirmTrial = false },
-                title = { Text("Проба RTT · $sampleHz Гц · 5 секунд?") },
-                text = { Text(if (!debug) "На 5 секунд будет включён экспериментальный сбор сигналов. Он временно меняет работу платы и может конфликтовать с прошивкой. После остановки приложение проверит восстановление. Не отключайте USB до завершения." else "Поля перечислены в разделе пробы. SRAM и таймер считаются предположительно свободными по ELF и регистрам. " +
-                    "Это не исключает конфликта с кучей, стеком или будущей работой прошивки. " +
-                    "Ядро временно останавливается; Flash не меняется. После пробы выполняется восстановление. " +
-                    "При обрыве USB оно не гарантируется. Продолжайте только на испытательной плате.") },
-                confirmButton = { TextButton(onClick = { confirmTrial = false; runTrial() }) { Text("Запустить пробу") } },
-                dismissButton = { TextButton(onClick = { confirmTrial = false }) { Text("Отмена") } },
-            )
-            HwScreen("Проба RTT", onBack = { if (trialRunning) trial?.cancel() else finish() },
+            HwScreen("Настройка RTT", onBack = { if (trialRunning) trial?.cancel() else finish() },
                 navigationEnabled = !trialRunning && !busy, keepAwake = trialRunning) {
-                SectionCard("Запись сигналов · $sampleHz Гц · 5 секунд") {
-                    Text("Выберите ELF текущей прошивки и запустите пробу. Проверки выполнятся автоматически.")
+                SectionCard("Запись сигналов · $sampleHz Гц") {
+                    Text("Выберите ELF текущей прошивки и частоту. Запись запускается кнопкой «Запись» на графике; каналы выбираются там же.")
                     if (!route.ready) Text("Сначала подключите плату на странице «Устройство».")
                     OutlinedButton(enabled = !busy && !trialRunning, onClick = { openElf.launch(arrayOf("*/*")) }) {
                         Text(if (selectedElf == null) "Выбрать ELF прошивки" else "Заменить ELF прошивки")
@@ -138,6 +135,7 @@ class RttDoctorActivity : ComponentActivity() {
                                 }, label = { Text("$rate Гц") })
                         }
                     }
+                    Text("Запись идёт до нажатия «Остановить». При уходе с экрана запись остановится с восстановлением устройства.", style = MaterialTheme.typography.bodySmall)
                     if (sampleHz > 100) Text("Экспериментальная частота. После пробы проверьте пропуски и восстановление.", style = MaterialTheme.typography.bodySmall)
                     Text("Эксперимент · STM32F411", style = MaterialTheme.typography.bodySmall)
                 }
@@ -146,7 +144,7 @@ class RttDoctorActivity : ComponentActivity() {
                     Text("Выборка: $sampleHz Гц · буфер: 4 КиБ")
                     Text("Чтение буфера телефоном: каждые 10 мс")
                     Text("Таймер: первый кандидат из TIM2–TIM5. SRAM: окно по выбранному ELF.", style = MaterialTheme.typography.bodySmall)
-                    Text("Предполагаемые свободные ресурсы. Короткая проба работает отдельно от обычного SWD-опроса.", style = MaterialTheme.typography.bodySmall)
+                    Text("Предполагаемые свободные ресурсы. Запись работает отдельно от обычного SWD-опроса.", style = MaterialTheme.typography.bodySmall)
                     Text("Успешная короткая проба не исключает более позднего использования памяти или таймера прошивкой.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Память по ELF") {
@@ -167,24 +165,11 @@ class RttDoctorActivity : ComponentActivity() {
                     if (timing.isNotEmpty()) Text(timing)
                 }
                 }
-                SectionCard("Сигналы и результат") {
-                    val fields = RttTrial.fields()
-                    Text("Сигналов для записи: ${fields.size}")
-                    if (fields.isEmpty()) Text("Загрузите таблицу на странице «Сигналы».")
-                    else if (!debug) TextButton(onClick = { showFields = !showFields }) {
-                        Text(if (showFields) "Скрыть сигналы" else "Показать сигналы")
+                if (RttTrial.lastSummary.isNotEmpty()) SectionCard("Последняя запись") {
+                    Text(RttTrial.lastSummary)
+                    if (RttTrial.lastReport != null) OutlinedButton(onClick = { saveTrial.launch("rtt-recording.zip") }) {
+                        Text("Сохранить запись и отчёт…")
                     }
-                    if (debug || showFields) Text(fields.joinToString("\n") { if (debug) it.topic else it.shortName })
-                    if (!access) Text("Включите «Доступ» в шапке экрана.")
-                    if (Session.recording != null) Text("Сначала остановите текущую запись.")
-                    Button(enabled = !busy && !trialRunning && Session.recording == null && route.ready && access && selectedElf != null && fields.isNotEmpty(),
-                        onClick = { confirmTrial = true }) { Text("Проба на 5 секунд") }
-                    if (trialRunning) OutlinedButton(onClick = { trial?.cancel() }) { Text("Остановить и восстановить") }
-                    if (trialResult.isNotEmpty()) Text(if (debug) trialResult else trialSummary)
-                    if (!trialRunning && RttTrial.lastReport != null) OutlinedButton(onClick = {
-                        saveTrial.launch("rtt-trial.zip")
-                    }) { Text("Сохранить запись…") }
-                    if (debug) Text("Диагностический поток .rtt.bin и отчёт .json сохраняются в папке rtt файлов приложения. После снятия заглушки также создаётся MCAP с полями и исходными seq/tick; все файлы входят в ZIP.", style = MaterialTheme.typography.bodySmall)
                 }
                 if (busy || trialRunning) LinearProgressIndicator()
             }
@@ -195,28 +180,6 @@ class RttDoctorActivity : ComponentActivity() {
         super.onPause()
     }
 
-    private fun runTrial() {
-        if (busy || trialRunning) return
-        if (Session.recording != null) {
-            trialResult = "Сначала остановите текущую запись."
-            trialSummary = trialResult
-            return
-        }
-        val elf = selectedElf ?: return
-        val fields = RttTrial.fields()
-        val rate = sampleHz
-        val runner = RttTrial()
-        trial = runner
-        busy = true; trialRunning = true; trialResult = "Проба выполняется; затем — восстановление устройства…"
-        trialSummary = "Запись и восстановление выполняются…"
-        Session.userSaid("подтвердил короткую пробу RTT: $rate Гц, 5 секунд")
-        Session.stopPolling()
-        val directory = java.io.File(getExternalFilesDir(null) ?: filesDir, "rtt")
-        Session.worker.execute {
-            val result = runner.run(elf, fields, directory, rate)
-            runOnUiThread { trialResult = result; trialSummary = RttTrial.lastSummary; busy = false; trialRunning = false; trial = null }
-        }
-    }
     private fun inspectTiming() {
         busy = true
         timing = ""

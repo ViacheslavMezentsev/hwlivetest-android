@@ -258,7 +258,7 @@ private fun RecordingStatus(keepAwake: Boolean) {
         while (true) {
             val rec = Session.recording
             val elapsed = rec?.let { (android.os.SystemClock.elapsedRealtime() - it.startedAtMs) / 1000 } ?: 0L
-            value = Triple(rec != null, rec?.let { "● Запись · %d:%02d · %d КБ".format(elapsed / 60, elapsed % 60, it.bytes / 1024) } ?: "", elapsed)
+            value = Triple(rec != null || Session.rttRecording != null, rec?.let { "● Запись · %d:%02d · %d КБ".format(elapsed / 60, elapsed % 60, it.bytes / 1024) } ?: Session.rttRecording?.progressText.orEmpty(), elapsed)
             delay(250)
         }
     }

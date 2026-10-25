@@ -13,6 +13,7 @@ class RttSession internal constructor(
 ) {
     interface Sink {
         fun accept(bytes: ByteArray)
+        fun progress(elapsedMs: Long) {}
         fun close()
     }
     data class Result(val reason: String, val bytes: Long, val installStage: String?,
@@ -23,8 +24,8 @@ class RttSession internal constructor(
     private val used = AtomicBoolean(false)
     fun cancel() { cancelled.set(true) }
 
-    fun run(durationMs: Long, sink: Sink): Result {
-        require(durationMs in 1..60_000) { "Проба RTT ограничена 60 секундами" }
+    fun run(durationMs: Long?, sink: Sink): Result {
+        require(durationMs == null || durationMs in 1..3_600_000) { "Запись RTT ограничена одним часом" }
         check(used.compareAndSet(false, true)) { "Создайте новый RTT-сеанс" }
         var installed: RttInstaller.Result? = null
         var restored: RttTeardown.Result? = null
@@ -43,11 +44,14 @@ class RttSession internal constructor(
                     check(installed.recovery != null) { "Установка не вернула план восстановления" }
                     val started = nowMs()
                     reason = "duration"
-                    while (nowMs() - started < durationMs) {
+                    var lastProgress = -1000L
+                    while (durationMs == null || nowMs() - started < durationMs) {
                         if (cancelled.get()) { reason = "cancelled"; break }
+                        val elapsed = nowMs() - started
+                        if (elapsed - lastProgress >= 1000) { sink.progress(elapsed); lastProgress = elapsed }
                         val chunk = poll()
                         if (chunk.isNotEmpty()) { sink.accept(chunk); bytes += chunk.size }
-                        val remaining = durationMs - (nowMs() - started)
+                        val remaining = durationMs?.minus(nowMs() - started) ?: 10L
                         if (remaining > 0) sleep(minOf(10, remaining))
                     }
                     if (reason == "duration" && bytes == 0L) {

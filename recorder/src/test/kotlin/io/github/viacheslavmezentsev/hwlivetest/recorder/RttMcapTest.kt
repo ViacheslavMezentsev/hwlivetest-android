@@ -38,6 +38,27 @@ class RttMcapTest {
         } catch (_: IllegalStateException) { }
     }
 
+    @Test fun streamingAcrossSequenceAndTickWrapWithoutRetainingRecording() {
+        var count = 0
+        val input = object : java.io.InputStream() {
+            override fun read(): Int = error("bulk only")
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (count == 70_000) return -1
+                val data = frame(count, (0xFFFFFF00L + count) and 0xFFFFFFFFL, 1.5f)
+                data.copyInto(b, off); count++; return data.size
+            }
+        }
+        var outputBytes = 0L; var progress = 0L
+        val output = object : java.io.OutputStream() {
+            override fun write(b: Int) { outputBytes++ }
+            override fun write(b: ByteArray, off: Int, len: Int) { outputBytes += len }
+        }
+        val result = RttMcap.convert(input, output, fields, 1000) { progress = it }
+        assertEquals(70_000L, result.frames); assertEquals(210_000L, result.messages)
+        assertEquals(0, result.pendingBytes); assertTrue(outputBytes > 7_000_000)
+        assertTrue(progress > 65_536)
+    }
+
     @Test fun reservedTopicRejected() {
         try {
             RttMcap.convert(byteArrayOf().inputStream(), ByteArrayOutputStream(),

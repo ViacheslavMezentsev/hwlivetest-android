@@ -93,6 +93,36 @@ class RttSessionTest {
         assertTrue(closed); assertTrue(result.ok)
     }
 
+    @Test fun hourLimitUsesVirtualTimeAndStillRestores() {
+        var time = 0L; var progressCalls = 0; var restored = false
+        val result = RttSession(
+            install = { RttInstaller.Result(true, plan, "complete") },
+            poll = { byteArrayOf(1) },
+            teardown = { _, _ -> restored = true; RttTeardown.Result(true, "complete", 0) },
+            nowMs = { time }, sleep = { time += it }
+        ).run(3_600_000, object : RttSession.Sink {
+            override fun accept(bytes: ByteArray) {}
+            override fun progress(elapsedMs: Long) { progressCalls++; assertTrue(elapsedMs < 3_600_000) }
+            override fun close() { assertTrue(restored) }
+        })
+        assertEquals(3_600_000L, time); assertEquals(3600, progressCalls); assertTrue(result.ok)
+        try { session(mutableListOf()).run(3_600_001, Output()); fail() }
+        catch (_: IllegalArgumentException) { }
+    }
+
+    @Test fun manualRecordingDoesNotStopAtHourAndCancellationRestores() {
+        var time = 0L; var restored = false
+        lateinit var session: RttSession
+        session = RttSession(
+            install = { RttInstaller.Result(true, plan, "complete") },
+            poll = { if (time > 3_600_000) session.cancel(); byteArrayOf(1) },
+            teardown = { _, _ -> restored = true; RttTeardown.Result(true, "complete", 0) },
+            nowMs = { time }, sleep = { time += it }
+        )
+        val result = session.run(null, Output())
+        assertTrue(time > 3_600_000); assertTrue(restored); assertEquals("cancelled", result.reason)
+    }
+
     @Test fun sessionCannotBeReused() {
         val s = session(mutableListOf()); s.run(1, Output())
         try { s.run(1, Output()); fail() } catch (_: IllegalStateException) { }

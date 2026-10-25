@@ -23,8 +23,8 @@ class SettingsActivity : ComponentActivity() {
             val route by Session.route.collectAsState()
             val access by Session.writeAccess.collectAsState()
             var confirmFast by rememberSaveable { mutableStateOf(false) }
-            var showRttDetails by rememberSaveable { mutableStateOf(false) }
             var pollingHz by rememberSaveable { mutableStateOf(Prefs.pollingHz(this@SettingsActivity)) }
+            var rtt by rememberSaveable { mutableStateOf(Prefs.recordRtt(this@SettingsActivity)) }
             var backup by rememberSaveable { mutableStateOf(Prefs.flashBackup(this@SettingsActivity)) }
             var useSha by rememberSaveable { mutableStateOf(Prefs.useSha(this@SettingsActivity)) }
             HwScreen("Настройки", onBack = ::finish) {
@@ -50,30 +50,24 @@ class SettingsActivity : ComponentActivity() {
                     Text("От 1 до 20 Гц. Общая настройка для сигналов, графиков и страницы модуля. " +
                         "Фактическая частота зависит от числа полей и скорости соединения; медленные опросы не догоняются.",
                         style = MaterialTheme.typography.bodySmall)
-                    HorizontalDivider()
-                    Text("RTT с таймером · в разработке", style = MaterialTheme.typography.titleMedium)
-                    Text("Устройство собирает выборки, телефон забирает их из буфера. Для F411 доступна отдельная проба: 100 Гц, 5 секунд. Постоянная запись RTT ещё не подключена.",
-                        style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onClick = {
-                        startActivity(android.content.Intent(this@SettingsActivity, RttDoctorActivity::class.java))
-                    }) { Text("Пробная запись RTT · F411") }
-                    TextButton(onClick = { showRttDetails = !showRttDetails }) {
-                        Text(if (showRttDetails) "Скрыть особенности RTT" else "Особенности RTT")
-                    }
-                    if (showRttDetails) {
-                        Text("Частота выборки на устройстве и частота чтения буфера телефоном задаются отдельно. " +
-                            "Ползунок выше относится только к прямому чтению SWD.", style = MaterialTheme.typography.bodySmall)
-                        Text("Нужны выделенная область SRAM, свободный таймер и доступ к управлению. " +
-                            "Заглушка временно меняет работу устройства; Flash не перепрошивается. " +
-                            "При установке и снятии ядро останавливается.", style = MaterialTheme.typography.bodySmall)
-                        Text("После остановки записи требуется снять заглушку, восстановить настройки и проверить, " +
-                            "что прошивка продолжает работать. При обрыве USB восстановление не гарантируется.",
-                            style = MaterialTheme.typography.bodySmall)
-                    }
                 }
                 SectionCard("Запись") {
-                    Text("Формат записи: MCAP (ROS 1)")
-                    Text("Экран остаётся включённым при просмотре графиков и во время записи. Пауза графика не останавливает запись.", style = MaterialTheme.typography.bodySmall)
+                    listOf(false to "Прямое чтение SWD", true to "RTT с таймером · F411").forEach { (value, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = rtt == value, onClick = {
+                                rtt = value; Prefs.setRecordRtt(this@SettingsActivity, value)
+                                Session.userSaid("выбрал метод записи: $label")
+                            })
+                            TextButton(onClick = { rtt = value; Prefs.setRecordRtt(this@SettingsActivity, value) }) { Text(label) }
+                        }
+                    }
+                    Text(if (rtt) "Кнопка «Запись» на графике запускает RTT для выбранных каналов. Нужны ELF текущей прошивки и включённый доступ."
+                        else "Записываются результаты прямого чтения SWD с частотой опроса выше.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = {
+                        startActivity(android.content.Intent(this@SettingsActivity, RttDoctorActivity::class.java))
+                    }) { Text("Настройка RTT") }
+                    Text("Формат: MCAP (ROS 1). Запись идёт до нажатия «Остановить». Экран остаётся включённым. Пауза графика не останавливает запись.", style = MaterialTheme.typography.bodySmall)
+                    if (rtt) Text("RTT временно использует SRAM и таймер платы. При остановке восстанавливается состояние устройства, затем формируется MCAP. При уходе с графика запись останавливается. Не отключайте USB до завершения.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Действия с устройством") {
                     SettingSwitch("Быстрые действия", fast, route.ready && access) {

@@ -11,18 +11,25 @@ import org.json.JSONObject
 
 /** ТЗ RTT 2.9. Run only on Session.worker; cancellation never skips teardown. */
 class RttTrial {
+    @Volatile var progressText = "Подготовка записи…"
+        private set
     private val cancelled = AtomicBoolean(false)
     @Volatile private var running: RttSession? = null
-    fun cancel() { cancelled.set(true); running?.cancel() }
+    fun cancel() { progressText = "Остановка и восстановление…"; cancelled.set(true); running?.cancel() }
 
-    fun run(elf: ElfFile, fields: List<Field>, directory: File, sampleHz: Int = 100): String {
-        val report = JSONObject().put("version", BuildConfig.VERSION_NAME).put("sample_hz", sampleHz)
+    fun run(elf: ElfFile, fields: List<Field>, directory: File, sampleHz: Int = 100, onFrame: (io.github.viacheslavmezentsev.hwlivetest.telemetry.RttFrame) -> Unit = {}): String {
+        lastReport = null
+        val report = JSONObject().put("version", BuildConfig.VERSION_NAME).put("sample_hz", sampleHz).put("duration_ms", JSONObject.NULL).put("stop_mode", "manual")
             .put("fields", JSONArray(fields.map { JSONObject().put("topic", it.topic).put("address", it.address).put("kind", it.kind.key) }))
         var reportFile: File? = null
         var message: String
         var summary: String
         try {
+            require(fields.isNotEmpty() && fields.size <= 6 && fields.all { eligible(it) }) { "RTT поддерживает до шести выровненных полей SRAM без битовых масок" }
             require(sampleHz in RttImageBuilder.sampleRates)
+            check(directory.isDirectory || directory.mkdirs()) { "Не удалось создать папку отчётов" }
+            val storage = RttRecordingLimits.completionSpace(sampleHz * 2L, fields.size)
+            check(directory.usableSpace >= storage) { "Нужно свободное место: не менее ${(storage + 1048575) / 1048576} МиБ для потока, MCAP и экспорта" }
             check(!cancelled.get()) { "Отменено до установки" }
             check(Session.recording == null) { "Сначала остановите текущую запись" }
             val adapter = Session.stlink ?: error("Адаптер отключён")
@@ -63,18 +70,29 @@ class RttTrial {
             var lastTick: Long? = null
             val session = RttSession.forDevice(adapter, write, built.image, 0x431,
                 built.control, built.buffer, built.bufferBytes, built.counters)
-            val output = File(directory, "$stem.rtt.bin").outputStream()
+            val output = File(directory, "$stem.rtt.bin").outputStream().buffered(65536)
             running = session
             if (cancelled.get()) session.cancel()
-            val result = session.run(5000, object : RttSession.Sink {
+            var rawBytes = 0L
+            val result = session.run(null, object : RttSession.Sink {
                 override fun accept(bytes: ByteArray) {
                     output.write(bytes)
+                    rawBytes += bytes.size
                     decoder.feed(bytes).forEach { frame ->
                         if (firstTick == null) { firstTick = frame.tickMs; firstFrameWallMs = System.currentTimeMillis() }
                         lastTick = frame.tickMs
+                        onFrame(frame)
                     }
                 }
-                override fun close() = output.close()
+                override fun progress(elapsedMs: Long) {
+                    output.flush()
+                    check(directory.usableSpace >= RttRecordingLimits.completionSpace(decoder.stats.frames + sampleHz * 2L, fields.size)) { "Недостаточно места; запись остановлена" }
+                    val seconds = elapsedMs / 1000
+                    progressText = "Запись %d:%02d · исходный поток %.1f МиБ · %d кадров".format(
+                        java.util.Locale.ROOT, seconds / 60, seconds % 60,
+                        rawBytes / 1048576.0, decoder.stats.frames)
+                }
+                override fun close() { progressText = "Завершение записи…"; output.close() }
             })
             val stats = decoder.stats
             val counters = result.recovery?.counters
@@ -102,7 +120,7 @@ class RttTrial {
                 .put("restored", result.recovery?.ok ?: false).put("recovery_stage", result.recovery?.stage ?: "not_started")
                 .put("recovery_error", result.recovery?.error ?: JSONObject.NULL)
                 .put("error", result.error ?: JSONObject.NULL).put("close_error", result.closeError ?: JSONObject.NULL)
-            summary = (if (result.reason == "cancelled") "Проба остановлена." else if (result.ok) "Проба завершена." else "Проба завершилась с ошибкой.") +
+            summary = (if (result.reason == "cancelled") "Запись остановлена." else if (result.ok) "Запись завершена." else "Запись завершилась с ошибкой.") +
                 " Получено ${stats.frames} кадров; задано $sampleHz Гц." +
                 (measuredHz?.let { " Получено %.1f Гц.".format(java.util.Locale.ROOT, it) } ?: "") +
                 " Пропуски по seq: ${stats.missingEstimate}." +
@@ -118,11 +136,14 @@ class RttTrial {
             if (result.recovery?.ok != true && result.installStage != null) Session.disableWriteMode()
             // Disk conversion happens only after mandatory target recovery has returned.
             if (firstFrameWallMs != null) {
+                progressText = "Формирование MCAP после снятия заглушки…"
                 val partial = File(directory, "$stem.mcap.part")
                 try {
                     val converted = File(directory, "$stem.rtt.bin").inputStream().use { input ->
                         partial.outputStream().buffered().use { output ->
-                            io.github.viacheslavmezentsev.hwlivetest.recorder.RttMcap.convert(input, output, fields, firstFrameWallMs!!)
+                            io.github.viacheslavmezentsev.hwlivetest.recorder.RttMcap.convert(input, output, fields, firstFrameWallMs!!) { frames ->
+                                progressText = "Формирование MCAP: $frames из ${stats.frames} кадров"
+                            }
                         }
                     }
                     check(partial.renameTo(File(directory, "$stem.mcap"))) { "Не удалось завершить файл MCAP" }
@@ -139,7 +160,7 @@ class RttTrial {
             }
 
         } catch (error: Exception) {
-            message = "Проба не завершена: ${error.message}"
+            message = "Запись не завершена: ${error.message}"
             summary = message
             report.put("error", error.message ?: error.javaClass.simpleName)
         } finally {
@@ -159,9 +180,10 @@ class RttTrial {
             private set
         @Volatile var lastReport: File? = null
             private set
-        fun fields() = Session.fieldsFile?.fields.orEmpty().filter {
+        fun eligible(it: Field): Boolean =
             it.address in 0x20000000L..0x2001FFFCL && it.address % 4 == 0L &&
                 it.mask == null && it.shift == null && (it.sizeBits == null || it.sizeBits == 32)
-        }.take(6)
+
+        fun fields() = Session.fieldsFile?.fields.orEmpty().filter(::eligible).take(6)
     }
 }
