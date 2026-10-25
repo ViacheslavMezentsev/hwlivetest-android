@@ -58,6 +58,7 @@
         <activity android:name=".ModuleStatusActivity" android:exported="false" android:label="Модуль ST-Link" />
 
         <activity android:name=".SettingsActivity" android:exported="false" android:label="Настройки" />
+        <activity android:name=".RttDoctorActivity" android:exported="false" android:label="Подготовка RTT" />
 
         <activity android:name=".JournalActivity" android:exported="false" android:label="Журнал" />
 

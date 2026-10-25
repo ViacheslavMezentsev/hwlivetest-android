@@ -53,6 +53,9 @@ class SettingsActivity : ComponentActivity() {
                     Text("RTT с таймером · в разработке", style = MaterialTheme.typography.titleMedium)
                     Text("Устройство собирает выборки, телефон забирает их из буфера. Этот способ пока недоступен.",
                         style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = {
+                        startActivity(android.content.Intent(this@SettingsActivity, RttDoctorActivity::class.java))
+                    }) { Text("Подготовка RTT · F411") }
                     TextButton(onClick = { showRttDetails = !showRttDetails }) {
                         Text(if (showRttDetails) "Скрыть особенности RTT" else "Особенности RTT")
                     }
