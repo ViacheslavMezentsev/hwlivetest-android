@@ -36,6 +36,7 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
     var editingRate by rememberSaveable { mutableStateOf(false) }
     var rateDraft by rememberSaveable { mutableStateOf(PollingRate.DEFAULT_HZ) }
     val editRate = { rateDraft = ui.recordHz; editingRate = true }
+    LaunchedEffect(ui.recordRtt) { editingRate = false; rateDraft = ui.recordHz }
     var choosing by rememberSaveable { mutableStateOf(false) }
     var chosen by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var channelQuery by rememberSaveable { mutableStateOf("") }

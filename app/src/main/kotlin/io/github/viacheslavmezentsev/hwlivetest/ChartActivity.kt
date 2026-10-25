@@ -97,7 +97,7 @@ class ChartActivity : ComponentActivity() {
             onBack = ::finish,
             onPollingHz = { hz ->
                 if (ui.recordRtt) {
-                    if (ui.rttRunner == null) { Prefs.setRttHz(this, hz); ui.recordHz = hz }
+                    if (ui.rttRunner == null && hz in io.github.viacheslavmezentsev.hwlivetest.firmware.RttImageBuilder.sampleRates) { Prefs.setRttHz(this, hz); ui.recordHz = hz }
                 } else {
                     Prefs.setPollingHz(this, hz)
                     if (resumed) startPolling()
