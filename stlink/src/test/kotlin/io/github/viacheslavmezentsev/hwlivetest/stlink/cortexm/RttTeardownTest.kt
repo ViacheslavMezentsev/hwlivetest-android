@@ -49,6 +49,37 @@ class RttTeardownTest {
         assertEquals(0x08000000, t.mem[0xE000ED08])
         assertFalse(t.halted)
     }
+    @Test fun captureIsQuiescentAndFailureStillRestores() {
+        for (fail in listOf(false, true)) {
+            val t = Target(); var captured = false
+            val result = RttTeardown(t, t) { t.elapsed() }.run(plan, 4) {
+                assertTrue(t.halted); assertFalse(t.active)
+                assertEquals(0x20002000, t.mem[0xE000ED08])
+                captured = true
+                if (fail) error("snapshot failed")
+            }
+            assertTrue(captured); assertTrue(result.ok); assertFalse(t.halted)
+            assertEquals(if (fail) "snapshot failed" else null, result.captureError)
+            assertEquals(0x08000000, t.mem[0xE000ED08])
+        }
+    }
+
+    @Test fun captureNotCalledIfQuiescenceFails() {
+        val t = Target(); t.frozenOnRun = 1
+        var captured = false
+        val result = RttTeardown(t, t) { t.elapsed() }.run(plan, 4) { captured = true }
+        assertFalse(captured); assertFalse(result.ok)
+    }
+
+    @Test fun countersUseUnsignedWordsAndRejectCorruption() {
+        val c = RttTeardown.Counters.parse(intArrayOf(-1, 7, -2, 4))
+        assertEquals(4294967295L, c.produced); assertEquals(7L, c.dropped)
+        assertEquals(4294967294L, c.firstTick)
+        for (bad in listOf(intArrayOf(1), intArrayOf(1, 2, 3, 4))) {
+            try { RttTeardown.Counters.parse(bad); fail() } catch (_: IllegalArgumentException) { }
+        }
+    }
+
     @Test fun refusesUnknownHandler() {
         val t = Target(); t.pc = 0x08001000
         val result = run(t)

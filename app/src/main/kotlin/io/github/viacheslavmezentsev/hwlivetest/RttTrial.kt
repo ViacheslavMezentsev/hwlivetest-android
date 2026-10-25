@@ -62,7 +62,7 @@ class RttTrial {
             var firstFrameWallMs: Long? = null
             var lastTick: Long? = null
             val session = RttSession.forDevice(adapter, write, built.image, 0x431,
-                built.control, built.buffer, built.bufferBytes)
+                built.control, built.buffer, built.bufferBytes, built.counters)
             val output = File(directory, "$stem.rtt.bin").outputStream()
             running = session
             if (cancelled.get()) session.cancel()
@@ -77,6 +77,11 @@ class RttTrial {
                 override fun close() = output.close()
             })
             val stats = decoder.stats
+            val counters = result.recovery?.counters
+            val unaccounted = counters?.let { it.produced - it.dropped - stats.frames }
+            val captureComplete = counters != null && result.recovery?.captureError == null && result.closeError == null &&
+                unaccounted == 0L && decoder.pendingBytes == 0 && stats.discardedBytes == 0L && stats.duplicates == 0L &&
+                stats.sequenceDiscontinuities == 0L && stats.tickBackwards == 0L
             val span = if (firstTick != null && lastTick != null) (lastTick!! - firstTick!!) and 0xFFFFFFFFL else 0L
             val measuredHz = if (span in 1..0x7FFFFFFFL && stats.frames > 1 && stats.tickBackwards == 0L)
                 (stats.frames - 1) * 1000.0 / span else null
@@ -84,7 +89,13 @@ class RttTrial {
                 .put("missing_estimate", stats.missingEstimate).put("duplicates", stats.duplicates)
                 .put("discarded_bytes", stats.discardedBytes).put("pending_bytes", decoder.pendingBytes)
                 .put("tick_backwards", stats.tickBackwards).put("sequence_discontinuities", stats.sequenceDiscontinuities)
-                .put("target_dropped", JSONObject.NULL)
+                .put("target_dropped", counters?.dropped ?: JSONObject.NULL)
+                .put("target_produced", counters?.produced ?: JSONObject.NULL)
+                .put("target_first_tick", counters?.firstTick ?: JSONObject.NULL)
+                .put("target_last_tick", counters?.lastTick ?: JSONObject.NULL)
+                .put("unaccounted_frames", unaccounted ?: JSONObject.NULL)
+                .put("capture_complete", captureComplete)
+                .put("final_capture_error", result.recovery?.captureError ?: JSONObject.NULL)
                 .put("first_tick", firstTick ?: JSONObject.NULL).put("last_tick", lastTick ?: JSONObject.NULL)
                 .put("received_hz_by_tick_ms", measuredHz ?: JSONObject.NULL)
                 .put("repeated_ticks", stats.repeatedTicks).put("tick_wraps", stats.tickWraps)
@@ -95,13 +106,15 @@ class RttTrial {
                 " Получено ${stats.frames} кадров; задано $sampleHz Гц." +
                 (measuredHz?.let { " Получено %.1f Гц.".format(java.util.Locale.ROOT, it) } ?: "") +
                 " Пропуски по seq: ${stats.missingEstimate}." +
+                (counters?.let { " Потери в буфере MCU: ${it.dropped}." } ?: " Счётчики MCU недоступны.") +
+                (if (captureComplete) " Поток учтён полностью." else " Полнота потока не подтверждена; смотрите отчёт.") +
                 (if (stats.duplicates > 0 || stats.discardedBytes > 0 || stats.tickBackwards > 0 || stats.sequenceDiscontinuities > 0) " Есть нарушения потока — подробности в отчёте." else "") +
                 (if (result.recovery?.ok == true) " Восстановление подтверждено." else " Восстановление не подтверждено — проверьте устройство.")
             message = "Кадров: ${stats.frames}; пропуски seq: ${stats.missingEstimate}.\n" +
                 (measuredHz?.let { "Частота по tick: %.1f Гц.\n".format(java.util.Locale.ROOT, it) } ?: "") +
                 "Завершение: ${result.reason}.\nВосстановление: " +
                 (if (result.recovery?.ok == true) "подтверждено" else "НЕ подтверждено; проверьте устройство") +
-                listOfNotNull(result.error, result.recovery?.error, result.closeError).joinToString("\n", prefix = "\n")
+                listOfNotNull(result.error, result.recovery?.error, result.recovery?.captureError, result.closeError).joinToString("\n", prefix = "\n")
             if (result.recovery?.ok != true && result.installStage != null) Session.disableWriteMode()
             // Disk conversion happens only after mandatory target recovery has returned.
             if (firstFrameWallMs != null) {

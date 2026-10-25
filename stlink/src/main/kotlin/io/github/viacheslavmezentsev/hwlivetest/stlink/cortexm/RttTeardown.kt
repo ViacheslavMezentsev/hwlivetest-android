@@ -7,9 +7,22 @@ class RttTeardown(private val memory: DebugMemory, private val write: TargetWrit
     private val sleep: (Long) -> Unit = Thread::sleep) {
     data class Plan(val timer: RttDoctor.Timer, val stubStart: Long, val stubEnd: Long,
         val tick: Long, val originalVtor: Int, val originalRcc: Int)
-    data class Result(val ok: Boolean, val stage: String, val steps: Int, val error: String? = null)
+    data class Counters(val produced: Long, val dropped: Long, val firstTick: Long, val lastTick: Long) {
+        companion object {
+            fun parse(words: IntArray): Counters {
+                require(words.size == 4) { "Short RTT counters" }
+                val n = words.map { it.toUInt().toLong() }
+                require(n[1] <= n[0]) { "Invalid RTT counters" }
+                return Counters(n[0], n[1], n[2], n[3])
+            }
+        }
+    }
+    data class Result(val ok: Boolean, val stage: String, val steps: Int, val error: String? = null,
+        val captureError: String? = null, val counters: Counters? = null)
 
-    fun run(plan: Plan, maxSteps: Int = 512): Result {
+    fun run(plan: Plan, maxSteps: Int = 512, onQuiescent: (() -> Unit)? = null): Result {
+        var captureError: String? = null
+        var captureInterrupted = false
         require(plan.timer in RttDoctor.timers && maxSteps in 1..512)
         require(plan.stubStart >= 0x20000000 && plan.stubEnd <= 0x20020000 && plan.stubEnd > plan.stubStart)
         require(plan.tick in 0x20000000L..0x2001FFFCL && plan.tick % 4 == 0L)
@@ -50,6 +63,11 @@ class RttTeardown(private val memory: DebugMemory, private val write: TargetWrit
             val before = tick()
             write.go(); sleep(250); check(write.halt().halted)
             drain(); advanced(before); quiet()
+            // ТЗ RTT 2.12: producer is stopped and IRQ drained; capture failures cannot skip recovery.
+            try { onQuiescent?.invoke() } catch (error: Exception) {
+                captureInterrupted = Thread.interrupted() || error is InterruptedException
+                captureError = error.message ?: error.javaClass.simpleName
+            }
             stage = "restore"
             write.write32(0xE000ED08, plan.originalVtor); verify(0xE000ED08, plan.originalVtor)
             val rcc = (memory.read32(0x40023840) and t.clockBit.inv()) or (plan.originalRcc and t.clockBit)
@@ -63,10 +81,12 @@ class RttTeardown(private val memory: DebugMemory, private val write: TargetWrit
             check(!state.halted && !state.lockup)
             verify(active, 0, bit); verify(iser, 0, bit); verify(ispr, 0, bit)
             verify(0xE000ED08, plan.originalVtor)
-            Result(true, "complete", steps)
+            Result(true, "complete", steps, captureError = captureError)
         } catch (error: Exception) {
             runCatching { write.halt() }
-            Result(false, stage, steps, error.message ?: error.javaClass.simpleName)
+            Result(false, stage, steps, error.message ?: error.javaClass.simpleName, captureError)
+        } finally {
+            if (captureInterrupted) Thread.currentThread().interrupt()
         }
     }
 }

@@ -18,7 +18,7 @@ class RttSessionTest {
         return RttSession(
             install = { events += "install"; RttInstaller.Result(installOk, plan, "upload", if (installOk) null else "upload failed") },
             poll = { events += "poll"; read() },
-            teardown = { events += "teardown"; RttTeardown.Result(recoveryOk, if (recoveryOk) "complete" else "liveness", 0) },
+            teardown = { _, _ -> events += "teardown"; RttTeardown.Result(recoveryOk, if (recoveryOk) "complete" else "liveness", 0) },
             nowMs = { time }, sleep = { time += it })
     }
     @Test fun boundedRecordingAlwaysRestoresAndCloses() {
@@ -73,6 +73,26 @@ class RttSessionTest {
             assertTrue(Thread.currentThread().isInterrupted)
         } finally { Thread.interrupted() }
     }
+    @Test fun finalTailIsWrittenBeforeCloseAndIncludedInTotal() {
+        var time = 0L
+        val received = mutableListOf<Byte>()
+        var closed = false
+        val result = RttSession(
+            install = { RttInstaller.Result(true, plan, "complete") },
+            poll = { byteArrayOf() },
+            teardown = { _, accept ->
+                assertFalse(closed)
+                accept(byteArrayOf(1, 2, 3))
+                RttTeardown.Result(true, "complete", 0)
+            }, nowMs = { time }, sleep = { time += it }
+        ).run(10, object : RttSession.Sink {
+            override fun accept(bytes: ByteArray) { received.addAll(bytes.toList()) }
+            override fun close() { closed = true }
+        })
+        assertEquals(3L, result.bytes); assertEquals(3, received.size)
+        assertTrue(closed); assertTrue(result.ok)
+    }
+
     @Test fun sessionCannotBeReused() {
         val s = session(mutableListOf()); s.run(1, Output())
         try { s.run(1, Output()); fail() } catch (_: IllegalStateException) { }

@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class RttSession internal constructor(
     private val install: () -> RttInstaller.Result,
     private val poll: () -> ByteArray,
-    private val teardown: (RttTeardown.Plan) -> RttTeardown.Result,
+    private val teardown: (RttTeardown.Plan, (ByteArray) -> Unit) -> RttTeardown.Result,
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000 },
     private val sleep: (Long) -> Unit = Thread::sleep,
 ) {
@@ -17,7 +17,7 @@ class RttSession internal constructor(
     }
     data class Result(val reason: String, val bytes: Long, val installStage: String?,
         val recovery: RttTeardown.Result?, val error: String?, val closeError: String?) {
-        val ok: Boolean get() = reason == "duration" && bytes > 0 && recovery?.ok == true && error == null && closeError == null
+        val ok: Boolean get() = reason == "duration" && bytes > 0 && recovery?.ok == true && error == null && closeError == null && recovery.captureError == null
     }
     private val cancelled = AtomicBoolean(false)
     private val used = AtomicBoolean(false)
@@ -65,7 +65,9 @@ class RttSession internal constructor(
             interrupted = Thread.interrupted() || interrupted
             try {
                 installed?.recovery?.let { plan ->
-                    restored = try { teardown(plan) } catch (failure: Exception) {
+                    restored = try { teardown(plan) { chunk ->
+                        if (chunk.isNotEmpty()) { sink.accept(chunk); bytes += chunk.size }
+                    } } catch (failure: Exception) {
                         RttTeardown.Result(false, "exception", 0, failure.message ?: failure.javaClass.simpleName)
                     }
                 }
@@ -74,21 +76,38 @@ class RttSession internal constructor(
                 if (interrupted) Thread.currentThread().interrupt()
             }
         }
+        if (reason == "no_data" && bytes > 0) { reason = "duration"; error = null }
         return Result(reason, bytes, installed?.stage, restored, error, closeError)
     }
 
     companion object {
         /** Caller supplies a confirmed image and exclusively owns the connection until run returns. */
         fun forDevice(memory: DebugMemory, write: TargetWrite, image: RttInstaller.Image,
-            deviceId: Int, control: Long, buffer: Long, bufferBytes: Int): RttSession {
+            deviceId: Int, control: Long, buffer: Long, bufferBytes: Int, counters: Long? = null): RttSession {
             val end = image.base + image.bytes.size
             require(control >= image.base && control + 48 <= end)
             require(buffer >= image.base && buffer + bufferBytes <= end)
+            require(counters == null || (counters % 4 == 0L && counters >= image.base && counters + 16 <= end))
+            var started = false
             val ring = RttRingReader(memory, write, control, buffer, bufferBytes)
             return RttSession(
-                install = { RttInstaller(memory, write).install(image, deviceId) },
+                install = { RttInstaller(memory, write).install(image, deviceId).also { started = it.started } },
                 poll = { ring.poll() },
-                teardown = { RttTeardown(memory, write).run(it) },
+                teardown = { plan, accept ->
+                    var snapshot: RttTeardown.Counters? = null
+                    RttTeardown(memory, write).run(plan, onQuiescent = {
+                        if (started) {
+                            // Snapshot while halted, before restoring VTOR and resuming the firmware.
+                            // A full ring fits one bounded poll; the producer cannot add more data.
+                            var counterError: Exception? = null
+                            try { counters?.let { snapshot = RttTeardown.Counters.parse(memory.readBlock(it, 4)) } }
+                            catch (error: Exception) { counterError = error }
+                            accept(ring.poll(bufferBytes))
+                            check(ring.poll(bufferBytes).isEmpty()) { "RTT producer changed while halted" }
+                            counterError?.let { throw it }
+                        }
+                    }).copy(counters = snapshot)
+                },
             )
         }
     }
