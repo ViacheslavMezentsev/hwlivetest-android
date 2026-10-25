@@ -14,18 +14,46 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.McuVendor
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.RttDoctor
 import io.github.viacheslavmezentsev.hwlivetest.ui.*
 
-/** ТЗ RTT 2.3: explicit read-only inspection, no install action. */
+/** ТЗ RTT 2.3, 2.9: read-only preparation and separately confirmed short trial. */
 class RttDoctorActivity : ComponentActivity() {
+    @Volatile private var selectedElf: ElfFile? = null
+    companion object {
+        private var trial: RttTrial? = null
+        private var trialRunning by mutableStateOf(false)
+        private var trialResult by mutableStateOf("")
+    }
+    private var confirmTrial by mutableStateOf(false)
     private var busy by mutableStateOf(false)
     private var memory by mutableStateOf("")
     private var timers by mutableStateOf("")
     private var observedAdapter: Any? = null
     @Volatile private var symbols: RttElfSymbols.Symbols? = null
     private var timing by mutableStateOf("")
+    private val saveTrial = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        val report = RttTrial.lastReport
+        if (uri != null && report != null) Session.worker.execute {
+            val result = runCatching {
+                val raw = java.io.File(report.parentFile, report.nameWithoutExtension + ".rtt.bin")
+                contentResolver.openOutputStream(uri)!!.use { output ->
+                    java.util.zip.ZipOutputStream(output).use { zip ->
+                        listOf(report, raw).filter { it.isFile }.forEach { file ->
+                            zip.putNextEntry(java.util.zip.ZipEntry(file.name))
+                            file.inputStream().use { it.copyTo(zip) }
+                            zip.closeEntry()
+                        }
+                    }
+                }
+                "Отчёт RTT сохранён"
+            }.getOrElse { "Ошибка сохранения RTT: ${it.message}" }
+            Session.programSaid(result)
+            runOnUiThread { trialResult += "\n$result" }
+        }
+    }
     private val openElf = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && !busy) {
+        if (uri != null && !busy && !trialRunning) {
             busy = true
             symbols = null
+            selectedElf = null
             timing = ""
             Session.userSaid("выбрал ELF для подготовки RTT")
             Session.worker.execute {
@@ -45,6 +73,7 @@ class RttDoctorActivity : ComponentActivity() {
                     val a = RttElfAdvice.inspect(elf)
                     val names = RttElfSymbols.inspect(elf)
                     symbols = names
+                    selectedElf = elf
                     val vector = listOf(".isr_vector", ".vectors", ".vector_table", ".intvec", ".vectors_flash")
                         .mapNotNull { elf.section(it) }.firstOrNull { it.address == 0x08000000L }
                     val layoutText = if (vector != null) runCatching {
@@ -70,38 +99,83 @@ class RttDoctorActivity : ComponentActivity() {
             LaunchedEffect(route) {
                 if (!route.ready || Session.stlink !== observedAdapter) { timers = ""; timing = "" }
             }
-            HwScreen("Подготовка RTT", onBack = ::finish) {
+            if (confirmTrial) AlertDialog(
+                onDismissRequest = { confirmTrial = false },
+                title = { Text("Проба RTT на 5 секунд?") },
+                text = { Text("Поля перечислены в разделе пробы. SRAM и таймер считаются предположительно свободными по ELF и регистрам. " +
+                    "Это не исключает конфликта с кучей, стеком или будущей работой прошивки. " +
+                    "Ядро временно останавливается; Flash не меняется. После пробы выполняется восстановление. " +
+                    "При обрыве USB оно не гарантируется. Продолжайте только на испытательной плате.") },
+                confirmButton = { TextButton(onClick = { confirmTrial = false; runTrial() }) { Text("Запустить пробу") } },
+                dismissButton = { TextButton(onClick = { confirmTrial = false }) { Text("Отмена") } },
+            )
+            HwScreen("Подготовка RTT", onBack = { if (trialRunning) trial?.cancel() else finish() },
+                navigationEnabled = !trialRunning, keepAwake = trialRunning) {
                 SectionCard("Эксперимент · STM32F411") {
-                    Text("Проверка только читает сведения. Заглушка не загружается, ядро не останавливается.")
+                    Text("Проверки ниже только читают сведения. Отдельная короткая проба загружает заглушку в SRAM и временно останавливает ядро.")
                     Text("Результат — снимок состояния и рекомендации, а не разрешение запуска RTT.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Предлагаемые параметры пробы") {
                     Text("Выборка: 100 Гц · буфер: 4 КиБ")
                     Text("Чтение буфера телефоном: каждые 10 мс")
                     Text("Таймер: первый кандидат из TIM2–TIM5. SRAM: окно по выбранному ELF.", style = MaterialTheme.typography.bodySmall)
-                    Text("Предполагаемые свободные ресурсы. Проба ещё недоступна; параметры не меняют текущий SWD-опрос.", style = MaterialTheme.typography.bodySmall)
+                    Text("Предполагаемые свободные ресурсы. Короткая проба работает отдельно от обычного SWD-опроса.", style = MaterialTheme.typography.bodySmall)
                     Text("Успешная короткая проба не исключает более позднего использования памяти или таймера прошивкой.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Память по ELF") {
-                    OutlinedButton(enabled = !busy, onClick = { openElf.launch(arrayOf("*/*")) }) { Text("Выбрать ELF прошивки") }
+                    OutlinedButton(enabled = !busy && !trialRunning, onClick = { openElf.launch(arrayOf("*/*")) }) { Text("Выбрать ELF прошивки") }
                     if (memory.isNotEmpty()) Text(memory)
                     Text("Оценка для 128 КиБ SRAM F411: запас стека 2 КиБ, буфер 4 КиБ и около 2 КиБ служебных данных. " +
                         "Динамическая куча, стеки задач и соответствие ELF прошивке устройства не проверены. Резерв нужно подтвердить в прошивке.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Таймеры устройства") {
-                    OutlinedButton(enabled = !busy && route.ready, onClick = ::inspectTimers) { Text("Проверить TIM2–TIM5") }
+                    OutlinedButton(enabled = !busy && !trialRunning && route.ready, onClick = ::inspectTimers) { Text("Проверить TIM2–TIM5") }
                     if (!route.ready) Text("Сначала подключите устройство на странице «Устройство».")
                     if (timers.isNotEmpty()) Text(timers)
                     Text("Кандидат: тактирование и прерывания выключены. Прошивка может включить их позже; выбор требует проверки её конфигурации.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Частота и tick") {
-                    OutlinedButton(enabled = !busy && route.ready && memory.isNotEmpty(), onClick = ::inspectTiming) { Text("Проверить частоту и tick") }
+                    OutlinedButton(enabled = !busy && !trialRunning && route.ready && memory.isNotEmpty(), onClick = ::inspectTiming) { Text("Проверить частоту и tick") }
                     Text("Адреса из выбранного ELF. Соответствие прошивке не проверено. Частота берётся из SystemCoreClock с учётом APB1 и TIMPRE; переменная может быть устаревшей.", style = MaterialTheme.typography.bodySmall)
                     if (timing.isNotEmpty()) Text(timing)
+                }
+                SectionCard("Короткая проба · 100 Гц") {
+                    val fields = RttTrial.fields()
+                    Text("Первые до шести выровненных полей SRAM из таблицы сигналов:")
+                    Text(fields.joinToString("\n") { it.topic }.ifEmpty { "Загрузите таблицу на странице «Сигналы»." })
+                    if (!Session.writeMode) Text("Включите «Доступ» на странице «Устройство».")
+                    Button(enabled = !busy && !trialRunning && route.ready && Session.writeMode && selectedElf != null && fields.isNotEmpty(),
+                        onClick = { confirmTrial = true }) { Text("Проба на 5 секунд") }
+                    if (trialRunning) OutlinedButton(onClick = { trial?.cancel() }) { Text("Остановить и восстановить") }
+                    if (trialResult.isNotEmpty()) Text(trialResult)
+                    if (!trialRunning && RttTrial.lastReport != null) OutlinedButton(onClick = {
+                        saveTrial.launch("rtt-trial.zip")
+                    }) { Text("Сохранить отчёт и поток…") }
+                    Text("Диагностический поток .rtt.bin и отчёт .json сохраняются в папке rtt файлов приложения. Это ещё не MCAP.", style = MaterialTheme.typography.bodySmall)
                 }
                 if (busy) LinearProgressIndicator()
             }
         } }
+    }
+    override fun onPause() {
+        if (trialRunning) trial?.cancel()
+        super.onPause()
+    }
+
+    private fun runTrial() {
+        if (busy || trialRunning) return
+        val elf = selectedElf ?: return
+        val fields = RttTrial.fields()
+        val runner = RttTrial()
+        trial = runner
+        busy = true; trialRunning = true; trialResult = "Проба выполняется; затем — восстановление устройства…"
+        Session.userSaid("подтвердил короткую пробу RTT: 100 Гц, 5 секунд")
+        Session.stopPolling()
+        val directory = java.io.File(getExternalFilesDir(null) ?: filesDir, "rtt")
+        Session.worker.execute {
+            val result = runner.run(elf, fields, directory)
+            runOnUiThread { trialResult = result; busy = false; trialRunning = false; trial = null }
+        }
     }
     private fun inspectTiming() {
         busy = true
