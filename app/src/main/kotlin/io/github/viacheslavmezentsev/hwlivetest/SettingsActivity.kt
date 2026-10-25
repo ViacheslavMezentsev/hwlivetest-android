@@ -22,6 +22,7 @@ class SettingsActivity : ComponentActivity() {
             val fast by Session.fastActions.collectAsState()
             val route by Session.route.collectAsState()
             var confirmFast by rememberSaveable { mutableStateOf(false) }
+            var pollingHz by rememberSaveable { mutableStateOf(Prefs.pollingHz(this@SettingsActivity)) }
             var backup by rememberSaveable { mutableStateOf(Prefs.flashBackup(this@SettingsActivity)) }
             var useSha by rememberSaveable { mutableStateOf(Prefs.useSha(this@SettingsActivity)) }
             HwScreen("Настройки", onBack = ::finish) {
@@ -30,6 +31,19 @@ class SettingsActivity : ComponentActivity() {
                         Prefs.setDebugDetails(this@SettingsActivity, it); Session.debugDetails.value = it
                     }
                     Text("Адреса, регистры, символы ELF, чтение памяти по адресу и подробности обмена.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                SectionCard("Опрос устройства") {
+                    Text("Метод: прямое чтение памяти по SWD")
+                    Text("Частота: $pollingHz Гц")
+                    Slider(value = pollingHz.toFloat(), onValueChange = { pollingHz = it.toInt() },
+                        valueRange = PollingRate.MIN_HZ.toFloat()..PollingRate.MAX_HZ.toFloat(), steps = 18,
+                        onValueChangeFinished = {
+                            Prefs.setPollingHz(this@SettingsActivity, pollingHz)
+                            Session.userSaid("установил частоту SWD-опроса: $pollingHz Гц")
+                        })
+                    Text("От 1 до 20 Гц. Общая настройка для сигналов, графиков и страницы модуля. " +
+                        "Фактическая частота зависит от числа полей и скорости соединения; медленные опросы не догоняются.",
                         style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Запись") {

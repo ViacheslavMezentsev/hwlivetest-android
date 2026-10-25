@@ -190,7 +190,7 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
         if (!resumed || Session.stlink == null || Session.sampler == null) return
         val generation = pollGeneration
         ui.polling = true
-        Session.startPolling(500L, only = null,
+        Session.startPolling(PollingRate.periodMs(Prefs.pollingHz(this)), only = null,
             onReadings = { readings -> val readTime = android.os.SystemClock.elapsedRealtime(); runOnUiThread {
                 if (resumed && generation == pollGeneration) {
                     ui.readings = readings.associateBy { it.spec.topic }

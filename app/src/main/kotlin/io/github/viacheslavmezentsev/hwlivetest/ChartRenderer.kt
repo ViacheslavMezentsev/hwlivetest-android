@@ -36,8 +36,9 @@ class ChartRenderer(private val density: Float) {
         }
     var nowMs: Long = 0
 
-    /** Выбранный ряд: его значение показано крупно; линия толще и рисуется поверх. */
+    /** Выбранный ряд: его значение показано крупно, линия толще; порядок слоёв сохраняется. */
     var selected: Int = 0
+    var pollingPeriodMs: Long = 100L
 
     /** Нажатие на строку легенды — выбор ряда. */
     var onSelect: ((Int) -> Unit)? = null
@@ -110,7 +111,7 @@ class ChartRenderer(private val density: Float) {
         val leftLabels = leftAxis.ticks.map { ChartScale.label(it, leftAxis.step) }
         val rightLabels = rightAxis?.let { a -> a.ticks.map { ChartScale.label(it, a.step) } } ?: emptyList()
         val means = windows.map { it.mean }
-        val meanLabels = lines.mapIndexed { i, l -> means[i]?.let { ChartScale.label(it, axes[i].step / 10) } }
+        val meanLabels = means.map { it?.let(ChartValues::mean) }
 
         // Поля: подписи делений и средних слева (и справа для второй шкалы).
         val leftMeans = meanLabels.filterIndexed { i, _ -> rightAxis == null || i != 1 }.filterNotNull()
@@ -175,17 +176,18 @@ class ChartRenderer(private val density: Float) {
             val a = axes[li]
             path.reset()
             var started = false
-            var prevT = Long.MIN_VALUE
-            for (k in 0 until w.size) {
+            val points = PlotDecimator.indices(w.times, w.values, from, nowMs,
+                (right - left).toInt(), maxOf(GAP_MS, pollingPeriodMs * 3))
+            for (k in points) {
+                if (k < 0) { started = false; continue }
                 val v = w.values[k]
                 if (!v.isFinite()) {
                     started = false
                     continue
                 }
                 val t = w.times[k]
-                if (!started || t - prevT > GAP_MS) path.moveTo(x(t), y(v, a)) else path.lineTo(x(t), y(v, a))
+                if (!started) path.moveTo(x(t), y(v, a)) else path.lineTo(x(t), y(v, a))
                 started = true
-                prevT = t
             }
             stroke.color = line.color
             stroke.strokeWidth = dp(if (li == selected && lines.size > 1) 3f else 2f)

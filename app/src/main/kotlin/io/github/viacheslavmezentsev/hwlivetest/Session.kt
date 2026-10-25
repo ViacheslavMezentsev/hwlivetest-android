@@ -329,6 +329,7 @@ object Session {
     // ---------- Опрос ----------
 
     private var poll: ScheduledFuture<*>? = null
+    private var pollingGeneration = 0L
 
     @Volatile
     private var pollingActive = false
@@ -343,8 +344,8 @@ object Session {
     var recording: Recording? = null
 
     /**
-     * Читать поля [only] (null — все) с периодом [periodMs] мс (fixed rate: 100 мс — ровно
-     * 10 Гц, если проход быстрее периода) в потоке worker. [onReadings] и [onStopped]
+     * Читать поля [only] (null — все) с периодом [periodMs] мс без догоняющих запросов
+     * после задержки; не чаще 20 Гц (ТЗ прошивки 5.25) в потоке worker. [onReadings] и [onStopped]
      * вызываются в потоке worker.
      */
     @Synchronized
@@ -357,33 +358,49 @@ object Session {
         stopPolling()
         val s = sampler ?: return
         pollingActive = true
-        poll = worker.scheduleAtFixedRate({
-            val st = stlink
-            if (st == null) {
-                stopPolling()
-                onStopped("нет подключения")
-                return@scheduleAtFixedRate
+        val generation = pollingGeneration
+        val interval = periodMs.coerceAtLeast(50L)
+        val task = object : Runnable {
+            override fun run() {
+                synchronized(this@Session) { if (generation != pollingGeneration || !pollingActive) return }
+                val started = SystemClock.elapsedRealtime()
+                val st = stlink
+                if (st == null) {
+                    stopPolling()
+                    onStopped("нет подключения")
+                    return
+                }
+                val readable = s.fields.filter { only == null || it.topic in only }
+                    .filter { check(it).readable }.map { it.topic }
+                try {
+                    val t = SystemClock.elapsedRealtime()
+                    s.groupReads = target?.profile?.stm32Layout == true
+                    val r = s.sample(nowMs(), readBlock = { a, n -> st.readBlock(a, n) }, only = readable, isFatal = ::isFatal)
+                    synchronized(this@Session) { if (generation != pollingGeneration || !pollingActive) return }
+                    lastPollMs = SystemClock.elapsedRealtime() - t
+                    recording?.write(System.currentTimeMillis() * 1_000_000L, r)
+                    onReadings(r)
+                } catch (e: Exception) {
+                    synchronized(this@Session) { if (generation != pollingGeneration || !pollingActive) return }
+                    logLine("# опрос остановлен: ${e.message}")
+                    stopPolling()
+                    if (isFatal(e)) { closeConnection(); routeChanged(ConnectionState.Stage.ERROR, ErrorMessages.describe(e)) }
+                    onStopped(ErrorMessages.describe(e))
+                }
+                synchronized(this@Session) {
+                    if (generation == pollingGeneration && pollingActive) {
+                        poll = worker.schedule(this, PollingRate.delayAfter(interval,
+                            SystemClock.elapsedRealtime() - started), TimeUnit.MILLISECONDS)
+                    }
+                }
             }
-            val readable = s.fields.filter { only == null || it.topic in only }
-                .filter { check(it).readable }.map { it.topic }
-            try {
-                val t = SystemClock.elapsedRealtime()
-                s.groupReads = target?.profile?.stm32Layout == true
-                val r = s.sample(nowMs(), readBlock = { a, n -> st.readBlock(a, n) }, only = readable, isFatal = ::isFatal)
-                lastPollMs = SystemClock.elapsedRealtime() - t
-                recording?.write(System.currentTimeMillis() * 1_000_000L, r)
-                onReadings(r)
-            } catch (e: Exception) {
-                logLine("# опрос остановлен: ${e.message}")
-                stopPolling()
-                if (isFatal(e)) { closeConnection(); routeChanged(ConnectionState.Stage.ERROR, ErrorMessages.describe(e)) }
-                onStopped(ErrorMessages.describe(e))
-            }
-        }, 0, periodMs, TimeUnit.MILLISECONDS)
+        }
+        poll = worker.schedule(task, 0, TimeUnit.MILLISECONDS)
     }
 
     @Synchronized
     fun stopPolling() {
+        pollingGeneration++
         poll?.cancel(false)
         poll = null
         pollingActive = false

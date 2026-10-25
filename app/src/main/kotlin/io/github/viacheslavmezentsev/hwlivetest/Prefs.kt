@@ -4,6 +4,9 @@ import android.content.Context
 
 /** Настройки, которые переживают перезапуск приложения. */
 object Prefs {
+    fun pollingHz(c: Context): Int = PollingRate.clamp(c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getInt("polling_hz", PollingRate.DEFAULT_HZ))
+    fun setPollingHz(c: Context, hz: Int) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putInt("polling_hz", PollingRate.clamp(hz)).apply()
+
     fun debugDetails(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("debug_details", false)
     fun setDebugDetails(c: Context, v: Boolean) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("debug_details", v).apply()
 

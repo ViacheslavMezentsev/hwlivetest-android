@@ -32,6 +32,7 @@ class ChartUi : ViewModel() {
     var recording by mutableStateOf("")
     var recordBusy by mutableStateOf(false)
     var pollMs by mutableStateOf(0L)
+    var pollingPeriodMs by mutableStateOf(100L)
     var connecting by mutableStateOf(false)
     var connected by mutableStateOf(false)
     var setupKey = ""
@@ -156,7 +157,8 @@ class ChartActivity : ComponentActivity() {
         val current = ++generation
         if (!Session.route.value.ready) { ui.error = if (ui.connecting) "Подключение…" else "Нет связи. Ранее полученные данные сохранены."; return }
         ui.error = null
-        Session.startPolling(100L, ui.topics.toSet(),
+        ui.pollingPeriodMs = PollingRate.periodMs(Prefs.pollingHz(this))
+        Session.startPolling(ui.pollingPeriodMs, ui.topics.toSet(),
             onReadings = { readings ->
                 val error = readings.firstOrNull { it.error != null }?.let { it.spec.shortName+": "+it.error }
                 runOnUiThread { if (resumed && generation == current) ui.error = error }

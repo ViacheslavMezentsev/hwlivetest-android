@@ -155,7 +155,7 @@ private fun ChartStatistics(ui: ChartUi, fields: List<Field>, selected: Int) {
             val w = l.series.window(now - ui.windowMs, now)
             if (w.size > 1) rate = maxOf(rate, (w.size - 1)*1000.0/(w.times.last()-w.times.first()).coerceAtLeast(1))
             val text = if (w.size == 0) "нет данных" else
-                "мин "+w.min?.let(l.format)+"  ср "+w.mean?.let(l.format)+"  макс "+w.max?.let(l.format)
+                "мин "+w.min?.let(l.format)+"  ср "+w.mean?.let(ChartValues::mean)+"  макс "+w.max?.let(l.format)
             Text((if (index == selected) "● " else "○ ")+l.name+": "+text,
                 modifier = Modifier.fillMaxWidth().clickable { ui.selectedTopic = ui.topics[index] }.padding(vertical = 6.dp),
                 style = MaterialTheme.typography.bodyMedium, color = Color(l.color))
@@ -183,6 +183,7 @@ private fun ChartPlot(ui: ChartUi, own: Boolean, selected: Int, modifier: Modifi
         renderer.windowMs = ui.windowMs
         renderer.ownScale = own
         renderer.selected = selected
+        renderer.pollingPeriodMs = ui.pollingPeriodMs
         renderer.setColors(scheme.surface.toArgb(), scheme.onSurfaceVariant.toArgb(), scheme.outlineVariant.toArgb())
         clipRect { renderer.draw(drawContext.canvas.nativeCanvas, size.width, size.height) }
     }

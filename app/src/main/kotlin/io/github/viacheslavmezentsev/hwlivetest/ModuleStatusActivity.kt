@@ -58,7 +58,7 @@ class ModuleStatusActivity : ComponentActivity() {
     private fun startPolling() {
         error = ""
         polling = true
-        Session.startPolling(500L, null, onReadings = {}, onStopped = { message ->
+        Session.startPolling(PollingRate.periodMs(Prefs.pollingHz(this)), null, onReadings = {}, onStopped = { message ->
             runOnUiThread { polling = false; error = message }
         })
     }
