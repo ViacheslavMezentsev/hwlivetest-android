@@ -83,7 +83,7 @@ private fun JournalScreen(entries: List<SessionLog.Entry>, polling: Boolean, onB
         if (debug && !showHistory) Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = protocol, onCheckedChange = { protocol = it }); Text("Показать обмен USB")
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (debug && !showHistory) Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = polling, onCheckedChange = onPolling); Text("Писать обмен при опросе")
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

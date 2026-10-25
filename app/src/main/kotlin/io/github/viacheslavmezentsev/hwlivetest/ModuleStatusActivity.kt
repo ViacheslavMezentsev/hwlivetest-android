@@ -22,6 +22,7 @@ class ModuleStatusActivity : ComponentActivity() {
         setContent { HwTheme {
             val route by Session.route.collectAsState()
             val traffic by Session.traffic.collectAsState()
+            LaunchedEffect(route.ready) { if (!route.ready) stopPolling() }
             HwScreen("Модуль ST-Link", onBack = ::finish) {
                 InfoCard("Подключение", listOf(
                     "Модель: " + (Session.device?.model?.title ?: "не подключён"),

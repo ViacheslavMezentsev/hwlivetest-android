@@ -21,9 +21,9 @@ class ErrorMessagesTest {
     }
 
     @Test
-    fun noTargetMentionsTarget() {
-        val text = ErrorMessages.describe(StLinkException(StLinkErrorKind.NO_TARGET, "Цель не отвечает"))
-        assertTrue(text.startsWith("Нет цели"))
+    fun noTargetMentionsDevice() {
+        val text = ErrorMessages.describe(StLinkException(StLinkErrorKind.NO_TARGET, "Устройство не отвечает"))
+        assertTrue(text.startsWith("Нет устройства"))
     }
 
     @Test
