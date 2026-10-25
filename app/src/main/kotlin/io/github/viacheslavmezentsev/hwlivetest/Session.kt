@@ -220,6 +220,8 @@ object Session {
     /** Открыть адаптер, войти в SWD и опознать MCU. Вызывать в потоке [worker]. */
     fun connectBlocking(usb: StLinkUsb, d: StLinkDevice): TargetInfo {
         closeConnection()
+        // ТЗ прошивки 5.21: старый буфер доступен после обрыва, но не смешивается с новым сеансом.
+        sampler?.clear()
         routeChanged(ConnectionState.Stage.CONNECTING)
         try {
             val t = usb.open(d)
@@ -287,7 +289,6 @@ object Session {
     fun closeConnection() {
         fastActionsState.value = false
         stopPolling()
-        sampler?.clear()
         stlink?.disconnect()
         stlink = null
         connection = null

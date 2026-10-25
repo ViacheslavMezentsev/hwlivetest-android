@@ -284,6 +284,8 @@ fun TargetScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = status.muted,
             )
+            if (!ui.connected) Text("Подключите устройство для управления.", style = MaterialTheme.typography.bodySmall)
+            else if (!ui.writeMode) Text("Включите «Доступ» выше для команд ядра.", style = MaterialTheme.typography.bodySmall)
             val enabled = ui.connected && ui.writeMode && !ui.busy
             ButtonRow(
                 "Остановить" to { onAction("Остановить ядро") { it.halt() } },

@@ -22,19 +22,19 @@
 <div class="repo"><span>ViacheslavMezentsev / <strong>hwlivetest-android</strong></span><span class="badge">Open source · MIT</span></div>
 <section class="hero">
 <div class="eyebrow"><span class="dot"></span> ANDROID + USB OTG + ST-LINK</div>
-<h1>Плата работает.<br>Посмотрите, что внутри.</h1>
-<p class="lead">Опознайте Cortex-M, проверьте состояние ядра и наблюдайте сигналы прямо с телефона. Без Termux, OpenOCD и GDB.</p>
+<h1>Диагностика Cortex-M<br>с Android через ST-Link</h1>
+<p class="lead">Опознание микроконтроллера, проверка состояния ядра, чтение памяти и графики сигналов. Резервная копия, сверка и прошивка поддерживаемых STM32F1/F4. Подключение через USB OTG, без Termux, OpenOCD и GDB.</p>
 <div class="buttons"><a class="button primary" href="https://github.com/ViacheslavMezentsev/hwlivetest-android/releases">Релизы и APK ↗</a><a class="button" href="#workflow">С чего начать</a></div>
 <div class="chips"><span>Android 8.0+</span><span>ST-Link V2 / V2-1 / V3</span><span>Cortex-M · профили STM32</span></div>
 </section>
 <div class="layout"><div>
-<section id="workflow"><h2>От подключения к результату</h2>
+<section id="workflow"><h2>Порядок работы</h2>
 <div class="steps">
-<article><span class="number">01</span><div><h3>Проверьте устройство</h3><p>Подключите ST-Link через OTG и нажмите «ПУСК». Приложение проверит ядро и сбои. Проверки начала Flash и тактирования зависят от выбранного профиля MCU.</p></div></article>
+<article><span class="number">01</span><div><h3>Проверьте устройство</h3><p>Подключите ST-Link через OTG и нажмите «Проверить плату». Приложение проверит ядро и сбои. Проверки начала Flash и тактирования зависят от выбранного профиля MCU.</p></div></article>
 <article><span class="number">02</span><div><h3>Сохраните или обновите прошивку</h3><p>Снимите резервную копию, сверьте HEX или ELF с устройством. Для записи включите «Доступ» и подтвердите операцию.</p></div></article>
 <article><span class="number">03</span><div><h3>Наблюдайте сигналы</h3><p>Загрузите addresses.json или используйте таблицу из совпавшего ELF. Откройте графики, выберите каналы и запишите MCAP.</p></div></article>
 </div></section>
-<section><h2>Один сеанс, четыре страницы</h2>
+<section><h2>Разделы приложения</h2>
 <div class="features">
 <article><h3>Устройство</h3><p>Состояние подключения, свойства MCU, выбор совместимого профиля и управление ядром. Отдельная страница ST-Link показывает трафик.</p></article>
 <article><h3>Прошивка</h3><p>Резервная копия Flash, сверка, запись и стирание для поддерживаемых STM32F1 и STM32F4.</p></article>
@@ -45,14 +45,14 @@
 <li>Откройте <a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/releases">релизы</a> и скачайте приложенный APK.</li>
 <li>Откройте APK на телефоне и разрешите установку из выбранного источника.</li>
 <li>Подключите ST-Link к плате и телефону через OTG. Разрешите приложению доступ к USB.</li>
-<li>Нажмите «ПУСК» или откройте экспертный режим — вкладку «Устройство».</li>
+<li>Нажмите «Проверить плату» или откройте экспертный режим — вкладку «Устройство».</li>
 </ol><p class="note">По умолчанию приложение только читает. Запись, стирание и управление ядром доступны после явного включения доступа. Быстрые действия настраиваются отдельно.</p></section>
 </div><aside>
 <section class="panel"><h2>Версии</h2><p>Изменения каждой версии хранятся рядом с исходным кодом.</p><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/tree/main/docs/releases">Описания релизов →</a><hr><p class="muted">Проверенный APK прикладывается к GitHub Release после публикации тега владельцем.</p></section>
 <section class="panel"><h2>Документация</h2><ul class="links">
-<li><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/heuristics.md">Что проверяет «ПУСК» →</a></li>
+<li><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/heuristics.md">Проверки устройства →</a></li>
 <li><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/architecture.md">Архитектура →</a></li>
-<li><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/docs/roadmap.md">План разработки →</a></li>
+<li><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/blob/main/TODO.md">План разработки →</a></li>
 <li><a href="https://github.com/ViacheslavMezentsev/hwlivetest-android/issues">Сообщить о проблеме →</a></li></ul></section>
 <section class="panel"><h2>В разработке</h2><p>Логический анализатор FX2 пока отложен. USB-UART и работа с несколькими приборами остаются в плане.</p><a href="https://viacheslavmezentsev.github.io/stm32-gdbtest/">Инструменты STM32 для ПК ↗</a></section>
 </aside></div>

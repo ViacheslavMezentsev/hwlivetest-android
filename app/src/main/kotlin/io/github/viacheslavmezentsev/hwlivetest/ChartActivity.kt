@@ -32,6 +32,10 @@ class ChartUi : ViewModel() {
     var recording by mutableStateOf("")
     var recordBusy by mutableStateOf(false)
     var pollMs by mutableStateOf(0L)
+    var connecting by mutableStateOf(false)
+    var connected by mutableStateOf(false)
+    var setupKey = ""
+    var colors = emptyMap<String, Int>()
     var afterFolder: String? = null
     var saved by mutableStateOf<SavedRecording?>(null)
 }
@@ -42,7 +46,12 @@ class ChartActivity : ComponentActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var resumed = false
     private var generation = 0
-    private val onSessionChanged: () -> Unit = { applyTopics(); if (resumed) startPolling() }
+    private lateinit var connector: Connector
+    private val onSessionChanged: () -> Unit = {
+        applyTopics()
+        if (!Session.route.value.ready && Session.recording != null && !ui.recordBusy) stopRecording(showResult = true)
+        if (resumed) startPolling()
+    }
     private val redraw = object : Runnable {
         override fun run() { refresh(); if (resumed) handler.postDelayed(this, 100L) }
     }
@@ -59,20 +68,34 @@ class ChartActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ui = ViewModelProvider(this)[ChartUi::class.java]
+        connector = Connector(this) { text, tone -> if (tone == Connector.Tone.ERROR) ui.error = text }
         if (ui.topics.isEmpty()) {
+            val available = Session.fieldsFile?.fields.orEmpty()
+            ui.setupKey = ChartSetup.key(available)
+            val (topics, window, scale) = Prefs.chart(this, ui.setupKey)
             ui.topics = (savedInstanceState?.getStringArrayList("topics")
-                ?: listOfNotNull(intent.getStringExtra(EXTRA_TOPIC))).filter { Session.field(it) != null }
-            ui.selectedTopic = savedInstanceState?.getString("selected")
-            ui.windowMs = savedInstanceState?.getLong("window", 30_000L) ?: 30_000L
-            ui.ownScale = savedInstanceState?.getString("scale")?.toBooleanStrictOrNull()
+                ?: intent.getStringArrayListExtra(EXTRA_TOPICS)
+                ?: ChartSetup.topics(topics, available, intent.getStringExtra(EXTRA_TOPIC)))
+                .filter { Session.field(it) != null }.distinct().take(6)
+            ui.selectedTopic = savedInstanceState?.getString("selected") ?: intent.getStringExtra(EXTRA_TOPIC)
+            ui.windowMs = savedInstanceState?.getLong("window", window) ?: window
+            ui.ownScale = if (savedInstanceState != null) savedInstanceState.getString("scale")?.toBooleanStrictOrNull() else scale
         }
         if (ui.topics.isEmpty()) { finish(); return }
+        if (ui.colors.isEmpty()) ui.colors = Prefs.chartColors(this, ui.setupKey, ui.topics)
         applyTopics()
         setContent { HwTheme { ChartScreen(ui, fields(), Session.fieldsFile?.fields.orEmpty(),
             onBack = ::finish,
             onTopics = { topics -> ui.topics = topics; applyTopics(); startPolling() },
             onPause = { ui.paused = !ui.paused; ui.pausedAt = Session.nowMs(); refresh() },
             onRecord = ::toggleRecording,
+            onConnect = {
+                ui.connecting = true
+                connector.connect { info ->
+                    ui.connecting = false
+                    if (info != null) { ui.paused = false; applyTopics(); if (resumed) startPolling() }
+                }
+            },
             onExport = { withFolder("export", ::exportBuffer) },
             onClear = {
                 if (!ui.recordBusy && Session.recording == null) Session.worker.execute {
@@ -107,17 +130,25 @@ class ChartActivity : ComponentActivity() {
         generation++
         handler.removeCallbacks(redraw)
         Session.removeListener(onSessionChanged)
+        Prefs.saveChart(this, ui.setupKey, ui.topics, ui.windowMs, ui.ownScale)
+        Prefs.saveChartColors(this, ui.setupKey, ui.colors)
         Session.stopPolling()
-        if (isFinishing) stopRecording(showResult = false)
         super.onPause()
+    }
+
+    override fun onStop() {
+        // ТЗ прошивки 5.21: закрыть файл в фоне; поворот сохраняет текущую запись.
+        if (!isChangingConfigurations && (Session.recording != null || ui.recordBusy)) stopRecording(showResult = !isFinishing)
+        super.onStop()
     }
 
     private fun fields(): List<Field> = ui.topics.mapNotNull { Session.field(it) }
 
     private fun applyTopics() {
         val fs = fields()
-        ui.lines = fs.mapIndexedNotNull { i, f -> Session.sampler?.series(f.topic)?.let {
-            ChartRenderer.Line(f.shortName, it, ChartRenderer.PALETTE[i % ChartRenderer.PALETTE.size], f::format)
+        ui.colors = ChartSetup.colors(fs.map { it.topic }, Session.fieldsFile?.fields.orEmpty(), ui.colors, ChartRenderer.PALETTE.size)
+        ui.lines = fs.mapNotNull { f -> Session.sampler?.series(f.topic)?.let {
+            ChartRenderer.Line(ChartSetup.label(f, fs), it, ChartRenderer.PALETTE[ui.colors.getValue(f.topic)], f::format)
         } }
         if (ui.selectedTopic !in ui.topics) ui.selectedTopic = ui.topics.firstOrNull()
         refresh()
@@ -125,20 +156,27 @@ class ChartActivity : ComponentActivity() {
 
     private fun startPolling() {
         val current = ++generation
-        if (Session.stlink == null) { ui.error = "Нет подключения — вернитесь и подключитесь"; return }
+        if (!Session.route.value.ready) { ui.error = if (ui.connecting) "Подключение…" else "Нет связи. Ранее полученные данные сохранены."; return }
         ui.error = null
         Session.startPolling(100L, ui.topics.toSet(),
             onReadings = { readings ->
                 val error = readings.firstOrNull { it.error != null }?.let { it.spec.shortName+": "+it.error }
                 runOnUiThread { if (resumed && generation == current) ui.error = error }
             },
-            onStopped = { error -> runOnUiThread { if (resumed && generation == current) ui.error = error } },
+            onStopped = { error -> runOnUiThread {
+                if (resumed && generation == current) {
+                    ui.error = error
+                    if (Session.recording != null && !ui.recordBusy) stopRecording(showResult = true)
+                }
+            } },
         )
     }
 
     private fun refresh() {
+        if (ui.connected && !Session.route.value.ready) { ui.pausedAt = ui.now; ui.paused = true }
         ui.now = if (ui.paused) ui.pausedAt else Session.nowMs()
         ui.pollMs = Session.lastPollMs
+        ui.connected = Session.route.value.ready
         ui.recording = Session.recording?.let { it.name+", "+it.messages+" сообщ." } ?: ""
     }
 
@@ -170,6 +208,7 @@ class ChartActivity : ComponentActivity() {
             val fs = fields()
             Session.worker.execute {
                 try {
+                    check(Session.route.value.ready) { "Устройство отключено" }
                     val rec = Recording.create(this, tree, Recording.fileName("hwlivetest"), fs)
                     Session.recording = rec
                     Session.logLine("# запись MCAP: ${rec.name}, полей ${fs.size}")
@@ -228,5 +267,8 @@ class ChartActivity : ComponentActivity() {
     }
 
 
-    companion object { const val EXTRA_TOPIC = "topic" }
+    companion object {
+        const val EXTRA_TOPIC = "topic"
+        const val EXTRA_TOPICS = "topics"
+    }
 }

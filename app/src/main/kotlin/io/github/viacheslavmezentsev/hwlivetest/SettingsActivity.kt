@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,6 +31,10 @@ class SettingsActivity : ComponentActivity() {
                     }
                     Text("Адреса, регистры, символы ELF, чтение памяти по адресу и подробности обмена.",
                         style = MaterialTheme.typography.bodySmall)
+                }
+                SectionCard("Запись") {
+                    Text("Формат записи: MCAP (ROS 1)")
+                    Text("Экран остаётся включённым при просмотре графиков и во время записи. Пауза графика не останавливает запись.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Действия с устройством") {
                     SettingSwitch("Быстрые действия", fast, route.ready && Session.writeMode) {
@@ -58,8 +64,8 @@ class SettingsActivity : ComponentActivity() {
 
 @Composable
 private fun SettingSwitch(label: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f))
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }

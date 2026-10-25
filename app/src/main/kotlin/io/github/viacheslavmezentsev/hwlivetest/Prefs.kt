@@ -11,6 +11,39 @@ object Prefs {
     fun useSha(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("use_sha", false)
     fun setUseSha(c: Context, v: Boolean) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("use_sha", v).apply()
 
+
+    // ТЗ прошивки 5.21: пользовательский набор каналов и вид графика для конкретной таблицы.
+    fun chart(c: Context, key: String): Triple<List<String>, Long, Boolean?> {
+        val p = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val topics = p.getString("chart_topics_$key", "")!!.split('\n').filter { it.isNotEmpty() }
+        val window = p.getLong("chart_window_$key", 30_000L).takeIf { it in listOf(30_000L, 60_000L, 300_000L) } ?: 30_000L
+        val scale = p.getString("chart_scale_$key", null)?.toBooleanStrictOrNull()
+        return Triple(topics, window, scale)
+    }
+
+    fun saveChart(c: Context, key: String, topics: List<String>, window: Long, scale: Boolean?) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+            .putString("chart_topics_$key", topics.joinToString("\n"))
+            .putLong("chart_window_$key", window)
+            .putString("chart_scale_$key", scale?.toString()).apply()
+    }
+
+    fun chartColors(c: Context, key: String, topics: List<String>): Map<String, Int> {
+        val p = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        return topics.associateWith { p.getInt("chart_color_${key}_$it", -1) }
+    }
+
+    fun saveChartColors(c: Context, key: String, colors: Map<String, Int>) {
+        val editor = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        colors.forEach { (topic, color) -> editor.putInt("chart_color_${key}_$topic", color) }
+        editor.apply()
+    }
+
+    fun firmwareUri(c: Context): String? = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("firmware_uri", null)
+    fun setFirmwareUri(c: Context, uri: String?) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString("firmware_uri", uri).apply()
+    }
+
     private const val FILE = "hwlivetest"
     private const val EXPERT = "expert_mode"
     private const val LOG_POLLING = "log_polling"

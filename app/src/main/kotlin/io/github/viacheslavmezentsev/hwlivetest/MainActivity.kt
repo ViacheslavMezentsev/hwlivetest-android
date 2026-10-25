@@ -73,6 +73,9 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
                     onConnect = ::connect,
                     onRead = ::readWord,
                     onOpen = { pickFields.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                    onCharts = { topics ->
+                        startActivity(Intent(this, ChartActivity::class.java).putStringArrayListExtra(ChartActivity.EXTRA_TOPICS, ArrayList(topics)))
+                    },
                     onChart = { f ->
                         Session.userSaid("открыть график: "+f.topic)
                         startActivity(Intent(this, ChartActivity::class.java).putExtra(ChartActivity.EXTRA_TOPIC, f.topic))
@@ -192,7 +195,7 @@ class MainActivity : ComponentActivity(), WorkspaceHost {
                 if (resumed && generation == pollGeneration) {
                     ui.readings = readings.associateBy { it.spec.topic }
                     val now = readTime
-                    ui.readAt = readings.filter { it.raw != null && it.error == null }.associate { it.spec.topic to now }
+                    ui.readAt = ui.readAt + readings.filter { it.raw != null && it.error == null }.associate { it.spec.topic to now }
                 }
             } },
             onStopped = { message -> runOnUiThread {

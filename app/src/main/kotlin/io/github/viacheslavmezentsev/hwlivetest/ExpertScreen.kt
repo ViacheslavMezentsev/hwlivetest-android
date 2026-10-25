@@ -33,6 +33,7 @@ fun ExpertScreen(
     onRead: (String) -> Unit,
     onOpen: () -> Unit,
     onChart: (Field) -> Unit,
+    onCharts: (List<String>) -> Unit,
 ) {
     val debug by Session.debugDetails.collectAsState()
     var address by rememberSaveable { mutableStateOf("E000ED00") }
@@ -48,6 +49,9 @@ fun ExpertScreen(
     val groups = remember(filtered, grouping) { FieldCatalog.group(filtered, grouping) }
     val colors = LocalStatusColors.current
     val listState = rememberLazyListState()
+    val tableKey = remember(ui.fields) { ChartSetup.key(ui.fields) }
+    var selectedTopics by rememberSaveable(tableKey) { mutableStateOf(emptyList<String>()) }
+    val selected = selectedTopics.filter { topic -> ui.fields.any { it.topic == topic } }
 
     // ТЗ прошивки 5.9.9: навигация не входит в обновляемый список показаний.
     HwScreen("Сигналы", onBack = onBack, scrolling = false, navigationEnabled = !ui.busy, actions = {
@@ -55,7 +59,11 @@ fun ExpertScreen(
             MenuAction("Простой режим", !ui.busy, onBack),
         ), navigationEnabled = !ui.busy)
     }) {
-        LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (selected.isNotEmpty()) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onCharts(selected) }, enabled = !ui.busy) { Text("График · ${selected.size}/6") }
+            TextButton(onClick = { selectedTopics = emptyList() }) { Text("Сбросить выбор") }
+        }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "connection") {
                 SectionCard("Подключение") {
                     Text(ui.status.ifEmpty { if (ui.connected) "Подключено" else "Подключите ST-Link через OTG" },
@@ -88,7 +96,7 @@ fun ExpertScreen(
                     if (debug) CatalogChoice("Группа: " + grouping.title,
                         FieldCatalog.Grouping.entries.map { it.name to it.title }) { groupingName = it; collapsed = emptyList() }
                     if (debug) CatalogChoice("Тип: " + activeType.ifEmpty { "все" }, listOf("" to "Все типы") + types.map { it to it }) { type = it }
-                    Text("Показано " + filtered.size + " из " + ui.fields.size + ". Нажмите сигнал для графика.",
+                    Text("Показано " + filtered.size + " из " + ui.fields.size + ". Нажмите сигнал или отметьте до 6 для сравнения.",
                         style = MaterialTheme.typography.bodySmall)
                     if (debug) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { query = ""; type = ""; collapsed = emptyList() }) { Text("Сбросить") }
@@ -106,7 +114,10 @@ fun ExpertScreen(
                     }
                 }
                 if (!debug || group !in collapsed) items(fields, key = { "field:" + it.topic }) { field ->
-                    SignalCard(field, debug, ui.fields.count { it.shortName == field.shortName } > 1, ui.connected && ui.polling, ui.readAt[field.topic], reading = { ui.readings[field.topic] }, onClick = { onChart(field) })
+                    SignalCard(field, debug, ChartSetup.label(field, ui.fields), ui.connected && ui.polling, ui.readAt[field.topic],
+                        selected = field.topic in selected, selectable = field.topic in selected || selected.size < 6,
+                        onSelect = { selectedTopics = if (field.topic in selected) selected-field.topic else (selected+field.topic).take(6) },
+                        reading = { ui.readings[field.topic] }, onClick = { onChart(field) })
                 }
             }
         }
@@ -125,16 +136,17 @@ private fun CatalogChoice(label: String, choices: List<Pair<String, String>>, on
 }
 
 @Composable
-private fun SignalCard(field: Field, debug: Boolean, duplicateName: Boolean, polling: Boolean, readAt: Long?, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
+private fun SignalCard(field: Field, debug: Boolean, label: String, polling: Boolean, readAt: Long?, selected: Boolean, selectable: Boolean, onSelect: () -> Unit, reading: () -> FieldSampler.Reading?, onClick: () -> Unit) {
     val colors = LocalStatusColors.current
     val check = Session.check(field)
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SignalDot(polling, readAt)
-                Text(field.shortName, style = MaterialTheme.typography.titleSmall)
-            }
             val sample = reading()
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SignalDot(polling && sample?.error == null, readAt)
+                Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Checkbox(checked = selected, enabled = selectable, onCheckedChange = { onSelect() })
+            }
             val value = sample?.value
             val error = sample?.error
             Text(when {
@@ -143,7 +155,7 @@ private fun SignalCard(field: Field, debug: Boolean, duplicateName: Boolean, pol
                 else -> "—"
             }, style = MaterialTheme.typography.titleLarge, minLines = 1, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 color = if (error != null || sample?.outOfRange == true) colors.bad else MaterialTheme.colorScheme.onSurface)
-            if (debug || duplicateName) Text(field.topic, style = MonoText, color = colors.muted)
+            if (debug) Text(field.topic, style = MonoText, color = colors.muted)
             if (debug) Text(field.address.hex32() + " · " + field.typeLabel + (field.sizeBits?.let { " · $it бит" } ?: ""), style = MonoText)
             if (debug) field.expr?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             if (debug) field.sourceFile?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.muted) }
@@ -156,11 +168,12 @@ private fun SignalCard(field: Field, debug: Boolean, duplicateName: Boolean, pol
 @Composable
 private fun SignalDot(polling: Boolean, readAt: Long?) {
     val now by produceState(android.os.SystemClock.elapsedRealtime(), polling, readAt) {
-        do { value = android.os.SystemClock.elapsedRealtime(); delay(250) } while (polling)
+        do { value = android.os.SystemClock.elapsedRealtime(); delay(250) } while (true)
     }
     val active = SignalFreshness.active(true, polling, now, readAt)
     val colors = LocalStatusColors.current
     val color = if (active) colors.ok else colors.muted
+    if (!active && readAt != null) Text("Нет данных ${((now - readAt) / 1000).coerceAtLeast(0)} с", style = MaterialTheme.typography.labelSmall, color = colors.muted)
     Canvas(Modifier.size(10.dp).semantics { contentDescription = if (active) "Сигнал читается" else "Нет свежих показаний" }) {
         drawCircle(color)
     }

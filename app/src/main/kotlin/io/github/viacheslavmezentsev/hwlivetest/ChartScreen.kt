@@ -29,7 +29,7 @@ import io.github.viacheslavmezentsev.hwlivetest.ui.*
 /** ТЗ прошивки 5.11: Canvas заменяет View; оси с гистерезисом сохраняются между кадрами. */
 @Composable
 fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -> Unit,
-    onTopics: (List<String>) -> Unit, onPause: () -> Unit, onRecord: () -> Unit,
+    onTopics: (List<String>) -> Unit, onPause: () -> Unit, onRecord: () -> Unit, onConnect: () -> Unit,
     onExport: () -> Unit, onClear: () -> Unit, onFolder: () -> Unit, onShare: (SavedRecording) -> Unit,
 ) {
     var choosing by rememberSaveable { mutableStateOf(false) }
@@ -38,14 +38,15 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
     ui.now // Автоматическая шкала зависит от последнего отсчёта каждого кадра.
     val own = ui.ownScale ?: (ui.lines.size > 1 && needsOwnScale(ui.lines.mapNotNull { it.series.lastValue() }))
     val recording = ui.recording.isNotEmpty()
-    HwScreen(if (fields.size == 1) fields[0].shortName else "График: "+fields.size+" каналов", onBack, scrolling = false, actions = {
+    HwScreen(if (fields.size == 1) fields[0].shortName else "График: "+fields.size+" каналов", onBack, scrolling = false, keepAwake = true, actions = {
         AppMenu(actions = listOf(
-            MenuAction("Сохранить буфер в MCAP", run = onExport),
-            MenuAction("Папка записей", run = onFolder),
+            MenuAction("Сохранить буфер", enabled = !recording && !ui.recordBusy, run = onExport),
+            MenuAction("Папка записей", enabled = !recording && !ui.recordBusy, run = onFolder),
             MenuAction("Очистить график", enabled = !recording && !ui.recordBusy, run = onClear),
         ), navigationEnabled = !recording && !ui.recordBusy)
     }) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        if (!ui.connected) OutlinedButton(onClick = onConnect, enabled = !ui.recordBusy && !ui.connecting) { Text(if (ui.connecting) "Подключение…" else "Подключить") }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val wide = maxWidth > maxHeight
             val plotHeight = (maxHeight * 0.46f).coerceIn(180.dp, 420.dp)
             val choose = { chosen = ui.topics; choosing = true }
@@ -71,8 +72,8 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
         }
     }
     ui.saved?.let { saved ->
-        AlertDialog(onDismissRequest = { ui.saved = null }, title = { Text(saved.name) },
-            text = { Text("Сообщений: "+saved.messages+", "+saved.bytes/1024+" КБ."+(saved.error?.let { " Ошибка: "+it } ?: "")) },
+        AlertDialog(onDismissRequest = { ui.saved = null }, title = { Text(if (saved.error == null) "Запись сохранена" else "Ошибка сохранения") },
+            text = { Text(saved.name+"\nСообщений: "+saved.messages+", "+saved.bytes/1024+" КБ."+(saved.error?.let { " Ошибка: "+it } ?: "")) },
             confirmButton = { TextButton(onClick = { onShare(saved) }) { Text("Поделиться") } },
             dismissButton = { TextButton(onClick = { ui.saved = null }) { Text("Закрыть") } },
         )
@@ -81,9 +82,9 @@ fun ChartScreen(ui: ChartUi, fields: List<Field>, all: List<Field>, onBack: () -
         text = { LazyColumn(Modifier.heightIn(max = 400.dp)) {
             items(all, key = { it.topic }) { f ->
                 Row(Modifier.fillMaxWidth().clickable {
-                    chosen = if (f.topic in chosen) chosen-f.topic else (chosen+f.topic).takeLast(6)
+                    chosen = if (f.topic in chosen) chosen-f.topic else if (chosen.size < 6) chosen+f.topic else chosen
                 }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = f.topic in chosen, onCheckedChange = null)
+                    Checkbox(checked = f.topic in chosen, enabled = f.topic in chosen || chosen.size < 6, onCheckedChange = null)
                     Text(f.topic, modifier = Modifier.weight(1f).padding(start = 12.dp), style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -113,16 +114,16 @@ private fun ChartControls(ui: ChartUi, own: Boolean, recording: Boolean,
     onPause: () -> Unit, onRecord: () -> Unit, onChoose: () -> Unit,
 ) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onPause, modifier = Modifier.weight(1f).fillMaxHeight()) { Text(if (ui.paused) "Продолжить" else "Пауза") }
+            OutlinedButton(onClick = onPause, modifier = Modifier.weight(1f).fillMaxHeight()) { Text(if (ui.paused) "Продолжить график" else "Пауза графика") }
             OutlinedButton(onClick = { ui.ownScale = !own }, enabled = ui.lines.size > 1, modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Text(if (own) "Свои шкалы" else "Общая шкала")
             }
         }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { onChoose() }, enabled = !recording && !ui.recordBusy,
-                modifier = Modifier.weight(1f).fillMaxHeight()) { Text("Каналы") }
-            Button(onClick = onRecord, enabled = !ui.recordBusy, modifier = Modifier.weight(1f).fillMaxHeight()) {
-                Text(if (recording) "Остановить запись" else "Запись MCAP")
+                modifier = Modifier.weight(1f).fillMaxHeight()) { Text("Каналы · ${ui.topics.size}/6") }
+            Button(onClick = onRecord, enabled = !ui.recordBusy && (recording || ui.connected), modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Text(if (recording) "■ Остановить" else "● Запись")
             }
         }
 }
@@ -143,7 +144,7 @@ private fun ChartStatistics(ui: ChartUi, fields: List<Field>, selected: Int) {
                 style = MaterialTheme.typography.bodyMedium, color = Color(l.color))
         }
         if (debug) Text("%.1f Гц, проход опроса %d мс".format(rate, ui.pollMs), style = MaterialTheme.typography.bodySmall)
-        if (recording) Text("● Запись: "+ui.recording, color = MaterialTheme.colorScheme.error)
+        if (ui.paused && ui.connected) Text(if (recording) "График на паузе. Опрос и запись продолжаются." else "График на паузе. Опрос продолжается.", style = MaterialTheme.typography.bodySmall)
         if (ui.message.isNotEmpty()) Text(ui.message)
         if (!debug) fields.filter { f -> fields.count { it.shortName == f.shortName } > 1 }.forEach { Text(it.topic, style = MaterialTheme.typography.bodySmall) }
         if (debug) fields.forEach { f -> Text(f.topic+"\n"+f.address.hex32()+" "+f.typeLabel+

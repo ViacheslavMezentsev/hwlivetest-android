@@ -94,6 +94,7 @@ fun HwScreen(
     onBack: (() -> Unit)? = null,
     scrolling: Boolean = true,
     navigationEnabled: Boolean = true,
+    keepAwake: Boolean = false,
     actions: @Composable RowScope.() -> Unit = { AppMenu(navigationEnabled = navigationEnabled) },
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -120,6 +121,7 @@ fun HwScreen(
     val barContent = if (dark) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimary
     Scaffold(
         topBar = {
+            Column {
             TopAppBar(
                 title = {
                     Column {
@@ -145,6 +147,8 @@ fun HwScreen(
                 ),
                 actions = actions,
             )
+            RecordingStatus(keepAwake)
+            }
         },
         bottomBar = {
             if (page != null) TabRow(selectedTabIndex = page.ordinal, modifier = Modifier.navigationBarsPadding()) {
@@ -231,4 +235,26 @@ fun ButtonRow(vararg actions: Pair<String, () -> Unit>, enabled: Boolean) {
             Button(onClick = onClick, enabled = enabled, modifier = Modifier.weight(1f).fillMaxHeight()) { Text(label) }
         }
     }
+}
+
+/** ТЗ прошивки 5.21: запись видна сверху; часы сохраняются для привязки снимка. */
+@Composable
+private fun RecordingStatus(keepAwake: Boolean) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    val state by androidx.compose.runtime.produceState<Triple<Boolean, String, Long>>(Triple(false, "", 0L)) {
+        while (true) {
+            val rec = Session.recording
+            val elapsed = rec?.let { (android.os.SystemClock.elapsedRealtime() - it.startedAtMs) / 1000 } ?: 0L
+            value = Triple(rec != null, rec?.let { "● Запись · %d:%02d · %d КБ".format(elapsed / 60, elapsed % 60, it.bytes / 1024) } ?: "", elapsed)
+            delay(250)
+        }
+    }
+    val holdScreen = keepAwake || state.first
+    androidx.compose.runtime.DisposableEffect(view, holdScreen) {
+        val previous = view.keepScreenOn
+        if (holdScreen) view.keepScreenOn = true
+        onDispose { view.keepScreenOn = previous }
+    }
+    if (state.first) Text(state.second, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
 }

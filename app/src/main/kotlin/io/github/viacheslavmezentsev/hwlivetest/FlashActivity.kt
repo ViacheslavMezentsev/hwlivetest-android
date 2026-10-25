@@ -165,7 +165,13 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
         }
         Session.stopPolling()
         ui.backup = Prefs.flashBackup(this)
+        ui.useSha = Prefs.useSha(this)
+        if (!ui.useSha) ui.expectedSha = ""
         sync()
+        if (ui.file == null && !ui.busy) Prefs.firmwareUri(this)?.let {
+            if (Session.route.value.ready) readVoltage()
+            loadHex(Uri.parse(it))
+        }
         setContent {
             HwTheme {
                 FlashScreen(
@@ -262,6 +268,11 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
                 val table = if (ElfFile.isElf(bytes)) SignalTable.fromElf(bytes, name) else null
                 val parsed = table?.image ?: IntelHex.parse(String(bytes, Charsets.US_ASCII))
                 table?.let { saveTable(it) }
+                // ТЗ прошивки 5.21: запоминаем только успешно разобранный файл с постоянным разрешением.
+                try {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    Prefs.setFirmwareUri(this, uri.toString())
+                } catch (_: SecurityException) { Prefs.setFirmwareUri(this, null) }
                 runOnUiThread {
                     signals = table
                     table?.let { t ->
@@ -281,9 +292,16 @@ class FlashActivity : ComponentActivity(), WorkspaceHost {
                     rebuildPlan()
                 }
             } catch (e: Exception) {
+                Prefs.setFirmwareUri(this, null)
                 Session.programSaid("файл не прочитан: ${e.message}")
                 runOnUiThread {
                     ui.busy = false
+                    segments = null
+                    signals = null
+                    plan = null
+                    ui.file = null
+                    ui.plan = emptyList()
+                    ui.planAllowed = false
                     ui.status = "Файл не прочитан: ${e.message}"
                     ui.error = true
                 }
@@ -716,7 +734,10 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
         SectionCard("Резервная копия и сверка · только чтение") {
             Text("Ядро продолжает работать. Доступ не требуется.", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = actions.backupAll, enabled = ui.connected && !ui.busy) { Text("Сохранить всю Flash в HEX…") }
-            OutlinedButton(onClick = actions.pickFile, enabled = !ui.busy) { Text(if (ui.file == null) "Выбрать HEX или ELF…" else "Другой файл…") }
+            OutlinedButton(onClick = actions.pickFile, enabled = !ui.busy) { Text(if (ui.file == null) "Выбрать HEX или ELF…" else "Заменить файл…") }
+            ui.file?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
+            if (!ui.connected) Text("Для копии и сверки подключите устройство.", style = MaterialTheme.typography.bodySmall)
+            else if (ui.file == null) Text("Для сверки выберите HEX или ELF.", style = MaterialTheme.typography.bodySmall)
             if (ui.useSha) OutlinedTextField(
                 value = ui.expectedSha,
                 onValueChange = actions.expectedSha,
@@ -742,6 +763,16 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
                 Switch(checked = ui.writeMode, onCheckedChange = actions.writeMode, enabled = !ui.busy)
             }
             CheckRow("Запустить после прошивки", ui.run, actions.run)
+            Text("Копия: "+(if (ui.backup) "включена" else "выключена")+" · Сверка обязательна", style = MaterialTheme.typography.bodySmall)
+            val reason = when {
+                ui.busy -> "Операция выполняется"
+                !ui.connected -> "Подключите устройство"
+                ui.file == null -> "Выберите HEX или ELF для прошивки"
+                !ui.writeMode -> "Включите «Доступ» выше для прошивки"
+                !ui.planAllowed -> "Прошивка недоступна: проверьте ограничения файла и устройства выше"
+                else -> null
+            }
+            reason?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             val enabled = ui.connected && ui.writeMode && !ui.busy
             Button(onClick = actions.flash, enabled = enabled && ui.planAllowed, modifier = Modifier.fillMaxWidth()) { Text("Прошить") }
             ButtonRow(
@@ -762,6 +793,7 @@ fun FlashScreen(ui: FlashUi, actions: FlashActions) {
 
         ui.result?.let { r ->
             InfoCard("Результат", r.lines().filter { ui.useSha || !it.startsWith("SHA-256") }, mono = true, accent = if (ui.resultOk) status.ok else status.bad)
+            if (ui.resultOk && !ui.busy) OutlinedButton(onClick = actions.back) { Text("Проверить работу") }
             if (ui.report != null) OutlinedButton(onClick = actions.share) { Text("Отправить отчёт") }
         }
 

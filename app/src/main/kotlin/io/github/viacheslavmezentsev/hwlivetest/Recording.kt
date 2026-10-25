@@ -20,6 +20,8 @@ import java.util.Locale
 class Recording(val uri: Uri, val name: String, private val writer: McapWriter, fields: List<Field>) {
     private val channels: Map<String, Int> = fields.associate { it.topic to writer.addChannel(it.topic, typeOf(it)) }
 
+    val startedAtMs = android.os.SystemClock.elapsedRealtime()
+
     val messages: Long get() = writer.messageCount
     val bytes: Long get() = writer.bytesWritten
 
