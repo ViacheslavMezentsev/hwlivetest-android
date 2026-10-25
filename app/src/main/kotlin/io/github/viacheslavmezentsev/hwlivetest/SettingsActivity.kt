@@ -55,7 +55,7 @@ class SettingsActivity : ComponentActivity() {
                         style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = {
                         startActivity(android.content.Intent(this@SettingsActivity, RttDoctorActivity::class.java))
-                    }) { Text("Подготовка RTT · F411") }
+                    }) { Text("Пробная запись RTT · F411") }
                     TextButton(onClick = { showRttDetails = !showRttDetails }) {
                         Text(if (showRttDetails) "Скрыть особенности RTT" else "Особенности RTT")
                     }

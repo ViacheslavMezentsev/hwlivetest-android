@@ -5,13 +5,13 @@ package io.github.viacheslavmezentsev.hwlivetest
  * `stlink/src/test/resources/captures`, служебные строки начинаются с `#`.
  */
 class SessionLog(private val maxLines: Int = 3000) {
-    data class Entry(val id: Long, val text: String)
+    data class Entry(val id: Long, val text: String, val debugOnly: Boolean = false)
     private var nextId = 0L
     private val lines = ArrayDeque<Entry>()
 
     @Synchronized
-    fun add(line: String) {
-        lines.addLast(Entry(nextId++, line))
+    fun add(line: String, debugOnly: Boolean = false) {
+        lines.addLast(Entry(nextId++, line, debugOnly))
         while (lines.size > maxLines) lines.removeFirst()
     }
 

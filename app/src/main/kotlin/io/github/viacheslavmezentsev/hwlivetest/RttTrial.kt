@@ -20,6 +20,7 @@ class RttTrial {
             .put("fields", JSONArray(fields.map { JSONObject().put("topic", it.topic).put("address", it.address).put("kind", it.kind.key) }))
         var reportFile: File? = null
         var message: String
+        var summary: String
         try {
             check(!cancelled.get()) { "Отменено до установки" }
             check(Session.recording == null) { "Сначала остановите текущую запись" }
@@ -87,6 +88,10 @@ class RttTrial {
                 .put("restored", result.recovery?.ok ?: false).put("recovery_stage", result.recovery?.stage ?: "not_started")
                 .put("recovery_error", result.recovery?.error ?: JSONObject.NULL)
                 .put("error", result.error ?: JSONObject.NULL).put("close_error", result.closeError ?: JSONObject.NULL)
+            summary = (if (result.reason == "cancelled") "Проба остановлена." else if (result.ok) "Проба завершена." else "Проба завершилась с ошибкой.") +
+                " Получено ${stats.frames} кадров." +
+                (measuredHz?.let { " %.1f Гц.".format(java.util.Locale.ROOT, it) } ?: "") +
+                (if (result.recovery?.ok == true) " Восстановление подтверждено." else " Восстановление не подтверждено — проверьте устройство.")
             message = "Кадров: ${stats.frames}; пропуски seq: ${stats.missingEstimate}.\n" +
                 (measuredHz?.let { "Частота по tick: %.1f Гц.\n".format(java.util.Locale.ROOT, it) } ?: "") +
                 "Завершение: ${result.reason}.\nВосстановление: " +
@@ -107,7 +112,9 @@ class RttTrial {
                         .put("mcap_pending_bytes", converted.pendingBytes).put("first_frame_wall_ms", firstFrameWallMs)
                         .put("mcap_time_basis", "first host receipt + MCU tick deltas; approximate epoch")
                     message += "\nMCAP: ${converted.messages} сообщений."
+                    summary += " Запись MCAP готова."
                 } catch (error: Exception) {
+                    summary += " Не удалось создать MCAP; исходный поток сохранён."
                     report.put("mcap_error", error.message ?: error.javaClass.simpleName)
                     message += "\nОшибка MCAP (исходный поток сохранён): ${error.message}"
                 }
@@ -115,18 +122,23 @@ class RttTrial {
 
         } catch (error: Exception) {
             message = "Проба не завершена: ${error.message}"
+            summary = message
             report.put("error", error.message ?: error.javaClass.simpleName)
         } finally {
             running = null
         }
         try { reportFile?.writeText(report.toString(2)) }
-        catch (error: Exception) { message += "\nОшибка сохранения отчёта: ${error.message}" }
+        catch (error: Exception) { message += "\nОшибка сохранения отчёта: ${error.message}"; summary += " Ошибка сохранения отчёта." }
         reportFile?.let { lastReport = it; message += "\nОтчёт: ${it.name}" }
-        Session.programSaid("RTT: $message")
+        lastSummary = summary
+        Session.programSaid("RTT: $summary")
+        Session.debugSaid(message)
         return message
     }
 
     companion object {
+        @Volatile var lastSummary: String = ""
+            private set
         @Volatile var lastReport: File? = null
             private set
         fun fields() = Session.fieldsFile?.fields.orEmpty().filter {

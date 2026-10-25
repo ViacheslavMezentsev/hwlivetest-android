@@ -73,7 +73,7 @@ private fun JournalScreen(entries: List<SessionLog.Entry>, polling: Boolean, onB
     var confirmHistory by rememberSaveable { mutableStateOf(false) }
     var protocol by rememberSaveable { mutableStateOf(false) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
-    val rows = remember(entries, protocol, debug) { entries.flatMap { entry ->
+    val rows = remember(entries, protocol, debug) { entries.filter { debug || !it.debugOnly }.flatMap { entry ->
         entry.text.lines().mapIndexed { i, text -> (entry.id.toString()+":"+i) to text }
     }.filter { (debug && protocol) || !SessionLog.isProtocol(it.second) }.takeLast(300).asReversed() }
     HwScreen("Журнал", onBack, scrolling = false, actions = {

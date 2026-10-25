@@ -21,6 +21,7 @@ class RttDoctorActivity : ComponentActivity() {
         private var trial: RttTrial? = null
         private var trialRunning by mutableStateOf(false)
         private var trialResult by mutableStateOf("")
+        private var trialSummary by mutableStateOf("")
     }
     private var confirmTrial by mutableStateOf(false)
     private var busy by mutableStateOf(false)
@@ -46,7 +47,7 @@ class RttDoctorActivity : ComponentActivity() {
                 "Отчёт RTT сохранён"
             }.getOrElse { "Ошибка сохранения RTT: ${it.message}" }
             Session.programSaid(result)
-            runOnUiThread { trialResult += "\n$result" }
+            runOnUiThread { trialResult += "\n$result"; trialSummary += "\n$result" }
         }
     }
     private val openElf = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -96,25 +97,33 @@ class RttDoctorActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent { HwTheme {
             val route by Session.route.collectAsState()
+            val debug by Session.debugDetails.collectAsState()
             LaunchedEffect(route) {
                 if (!route.ready || Session.stlink !== observedAdapter) { timers = ""; timing = "" }
             }
             if (confirmTrial) AlertDialog(
                 onDismissRequest = { confirmTrial = false },
                 title = { Text("Проба RTT на 5 секунд?") },
-                text = { Text("Поля перечислены в разделе пробы. SRAM и таймер считаются предположительно свободными по ELF и регистрам. " +
+                text = { Text(if (!debug) "На 5 секунд будет включён экспериментальный сбор сигналов. Он временно меняет работу платы и может конфликтовать с прошивкой. После остановки приложение проверит восстановление. Не отключайте USB до завершения." else "Поля перечислены в разделе пробы. SRAM и таймер считаются предположительно свободными по ELF и регистрам. " +
                     "Это не исключает конфликта с кучей, стеком или будущей работой прошивки. " +
                     "Ядро временно останавливается; Flash не меняется. После пробы выполняется восстановление. " +
                     "При обрыве USB оно не гарантируется. Продолжайте только на испытательной плате.") },
                 confirmButton = { TextButton(onClick = { confirmTrial = false; runTrial() }) { Text("Запустить пробу") } },
                 dismissButton = { TextButton(onClick = { confirmTrial = false }) { Text("Отмена") } },
             )
-            HwScreen("Подготовка RTT", onBack = { if (trialRunning) trial?.cancel() else finish() },
+            HwScreen("Проба RTT", onBack = { if (trialRunning) trial?.cancel() else finish() },
                 navigationEnabled = !trialRunning, keepAwake = trialRunning) {
-                SectionCard("Эксперимент · STM32F411") {
-                    Text("Проверки ниже только читают сведения. Отдельная короткая проба загружает заглушку в SRAM и временно останавливает ядро.")
-                    Text("Результат — снимок состояния и рекомендации, а не разрешение запуска RTT.", style = MaterialTheme.typography.bodySmall)
+                SectionCard("Запись сигналов · 100 Гц · 5 секунд") {
+                    Text("Выберите ELF текущей прошивки и запустите пробу. Проверки выполнятся автоматически.")
+                    if (!route.ready) Text("Сначала подключите плату на странице «Устройство».")
+                    OutlinedButton(enabled = !busy && !trialRunning, onClick = { openElf.launch(arrayOf("*/*")) }) {
+                        Text(if (selectedElf == null) "Выбрать ELF прошивки" else "Заменить ELF прошивки")
+                    }
+                    if (selectedElf != null) Text("ELF выбран. Соответствие прошивке на плате нужно подтвердить самостоятельно.")
+                    else if (memory.isNotEmpty()) Text(memory)
+                    Text("Эксперимент для STM32F411. Временно изменяет работу устройства; используйте испытательную плату.", style = MaterialTheme.typography.bodySmall)
                 }
+                if (debug) {
                 SectionCard("Предлагаемые параметры пробы") {
                     Text("Выборка: 100 Гц · буфер: 4 КиБ")
                     Text("Чтение буфера телефоном: каждые 10 мс")
@@ -139,22 +148,23 @@ class RttDoctorActivity : ComponentActivity() {
                     Text("Адреса из выбранного ELF. Соответствие прошивке не проверено. Частота берётся из SystemCoreClock с учётом APB1 и TIMPRE; переменная может быть устаревшей.", style = MaterialTheme.typography.bodySmall)
                     if (timing.isNotEmpty()) Text(timing)
                 }
-                SectionCard("Короткая проба · 100 Гц") {
+                }
+                SectionCard("Сигналы и результат") {
                     val fields = RttTrial.fields()
-                    Text("Первые до шести выровненных полей SRAM из таблицы сигналов:")
-                    Text(fields.joinToString("\n") { it.topic }.ifEmpty { "Загрузите таблицу на странице «Сигналы»." })
+                    Text("В запись войдут первые ${fields.size} подходящих сигналов:")
+                    Text(fields.joinToString("\n") { if (debug) it.topic else it.shortName }.ifEmpty { "Загрузите таблицу на странице «Сигналы»." })
                     if (!Session.writeMode) Text("Включите «Доступ» на странице «Устройство».")
                     if (Session.recording != null) Text("Сначала остановите текущую запись.")
                     Button(enabled = !busy && !trialRunning && Session.recording == null && route.ready && Session.writeMode && selectedElf != null && fields.isNotEmpty(),
                         onClick = { confirmTrial = true }) { Text("Проба на 5 секунд") }
                     if (trialRunning) OutlinedButton(onClick = { trial?.cancel() }) { Text("Остановить и восстановить") }
-                    if (trialResult.isNotEmpty()) Text(trialResult)
+                    if (trialResult.isNotEmpty()) Text(if (debug) trialResult else trialSummary)
                     if (!trialRunning && RttTrial.lastReport != null) OutlinedButton(onClick = {
                         saveTrial.launch("rtt-trial.zip")
-                    }) { Text("Сохранить отчёт и поток…") }
-                    Text("Диагностический поток .rtt.bin и отчёт .json сохраняются в папке rtt файлов приложения. После снятия заглушки также создаётся MCAP с полями и исходными seq/tick; все файлы входят в ZIP.", style = MaterialTheme.typography.bodySmall)
+                    }) { Text("Сохранить запись…") }
+                    if (debug) Text("Диагностический поток .rtt.bin и отчёт .json сохраняются в папке rtt файлов приложения. После снятия заглушки также создаётся MCAP с полями и исходными seq/tick; все файлы входят в ZIP.", style = MaterialTheme.typography.bodySmall)
                 }
-                if (busy) LinearProgressIndicator()
+                if (busy || trialRunning) LinearProgressIndicator()
             }
         } }
     }
@@ -167,6 +177,7 @@ class RttDoctorActivity : ComponentActivity() {
         if (busy || trialRunning) return
         if (Session.recording != null) {
             trialResult = "Сначала остановите текущую запись."
+            trialSummary = trialResult
             return
         }
         val elf = selectedElf ?: return
@@ -174,12 +185,13 @@ class RttDoctorActivity : ComponentActivity() {
         val runner = RttTrial()
         trial = runner
         busy = true; trialRunning = true; trialResult = "Проба выполняется; затем — восстановление устройства…"
+        trialSummary = "Запись и восстановление выполняются…"
         Session.userSaid("подтвердил короткую пробу RTT: 100 Гц, 5 секунд")
         Session.stopPolling()
         val directory = java.io.File(getExternalFilesDir(null) ?: filesDir, "rtt")
         Session.worker.execute {
             val result = runner.run(elf, fields, directory)
-            runOnUiThread { trialResult = result; busy = false; trialRunning = false; trial = null }
+            runOnUiThread { trialResult = result; trialSummary = RttTrial.lastSummary; busy = false; trialRunning = false; trial = null }
         }
     }
     private fun inspectTiming() {
@@ -212,7 +224,7 @@ class RttDoctorActivity : ComponentActivity() {
                 } ?: parts.add("Tick не найден однозначно; проверка пропущена.")
                 parts.joinToString("\n\n")
             }.getOrElse { "Проверка недоступна: ${it.message}" }
-            Session.programSaid("RTT: $result")
+            Session.debugSaid(result)
             runOnUiThread {
                 observedAdapter = adapter
                 timing = if (Session.stlink === adapter && Session.route.value.ready) result else "Устройство отключилось; повторите проверку."
@@ -238,7 +250,7 @@ class RttDoctorActivity : ComponentActivity() {
                             "IRQ: enabled=${o.enabled}, pending=${o.pending}, active=${o.active}"
                     }
             }.getOrElse { "Проверка недоступна: ${it.message}" }
-            Session.programSaid("RTT: $result")
+            Session.debugSaid(result)
             runOnUiThread {
                 observedAdapter = adapter
                 timers = if (Session.stlink === adapter && Session.route.value.ready) result else "Устройство отключилось; повторите проверку."

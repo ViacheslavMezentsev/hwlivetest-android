@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SessionLogTest {
+    @org.junit.Test fun debugDetailsRemainInExportAndAreSeparatelyMarked() {
+        val log = SessionLog()
+        log.add("Проба завершена")
+        log.add("SRAM details\nregisters", debugOnly = true)
+        org.junit.Assert.assertEquals(listOf("Проба завершена"), log.snapshot().filter { !it.debugOnly }.map { it.text })
+        org.junit.Assert.assertTrue(log.text().contains("registers"))
+    }
+
     @Test fun rowIdentitySurvivesEvictionAndClear() {
         val log = SessionLog(2)
         log.add("first")

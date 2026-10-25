@@ -180,6 +180,11 @@ object Session {
 
     fun programSaid(text: String) = logLine("$PROGRAM_PREFIX$text")
 
+    fun debugSaid(text: String) {
+        log.add("# RTT: $text", debugOnly = true)
+        onLog?.invoke()
+    }
+
     /** Последние [n] строк диалога (без обмена с адаптером). */
     fun dialogTail(n: Int): List<String> = log.text().lines()
         .filter { it.startsWith(USER_PREFIX) || it.startsWith(PROGRAM_PREFIX) }
