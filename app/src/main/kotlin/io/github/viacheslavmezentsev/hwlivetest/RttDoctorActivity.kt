@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
 import androidx.compose.foundation.layout.Row
-import kotlinx.coroutines.delay
 import io.github.viacheslavmezentsev.hwlivetest.firmware.RttImageBuilder
 import androidx.compose.runtime.*
 import io.github.viacheslavmezentsev.hwlivetest.firmware.ElfFile
@@ -17,7 +16,7 @@ import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.McuVendor
 import io.github.viacheslavmezentsev.hwlivetest.stlink.cortexm.RttDoctor
 import io.github.viacheslavmezentsev.hwlivetest.ui.*
 
-/** ТЗ RTT 2.3, 2.9: read-only preparation and separately confirmed short trial. */
+/** ТЗ RTT 2.13: recording configuration; launch belongs to the chart. */
 class RttDoctorActivity : ComponentActivity() {
     companion object {
         // ТЗ RTT 3.2: выбор ELF принадлежит сеансу, а не экземпляру Activity.
@@ -26,12 +25,8 @@ class RttDoctorActivity : ComponentActivity() {
         private var memory by mutableStateOf("")
         private var busy by mutableStateOf(false)
         internal var sampleHz by mutableStateOf(100)
-        private var trial: RttTrial? = null
-        private var trialRunning by mutableStateOf(false)
-        private var trialResult by mutableStateOf("")
-        private var trialSummary by mutableStateOf("")
     }
-    private var confirmTrial by mutableStateOf(false)
+    private var exportMessage by mutableStateOf("")
     private var timers by mutableStateOf("")
     private var observedAdapter: Any? = null
     private var timing by mutableStateOf("")
@@ -52,11 +47,11 @@ class RttDoctorActivity : ComponentActivity() {
                 "Отчёт RTT сохранён"
             }.getOrElse { "Ошибка сохранения RTT: ${it.message}" }
             Session.programSaid(result)
-            runOnUiThread { trialResult += "\n$result"; trialSummary += "\n$result" }
+            runOnUiThread { exportMessage = result }
         }
     }
     private val openElf = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && !busy && !trialRunning) {
+        if (uri != null && !busy) {
             busy = true
             symbols = null
             selectedElf = null
@@ -103,34 +98,27 @@ class RttDoctorActivity : ComponentActivity() {
         setContent { HwTheme {
             val route by Session.route.collectAsState()
             val debug by Session.debugDetails.collectAsState()
-            val access by Session.writeAccess.collectAsState()
-            LaunchedEffect(trialRunning) {
-                while (trialRunning) {
-                    trial?.let { trialSummary = it.progressText }
-                    delay(250)
-                }
-            }
-            var showFields by remember { mutableStateOf(false) }
+
             LaunchedEffect(route) {
                 if (!route.ready || Session.stlink !== observedAdapter) { timers = ""; timing = "" }
             }
-            HwScreen("Настройка RTT", onBack = { if (trialRunning) trial?.cancel() else finish() },
-                navigationEnabled = !trialRunning && !busy, keepAwake = trialRunning) {
+            HwScreen("Настройка RTT", onBack = ::finish,
+                navigationEnabled = !busy) {
                 SectionCard("Запись сигналов · $sampleHz Гц") {
                     Text("Выберите ELF текущей прошивки и частоту. Запись запускается кнопкой «Запись» на графике; каналы выбираются там же.")
                     if (!route.ready) Text("Сначала подключите плату на странице «Устройство».")
-                    OutlinedButton(enabled = !busy && !trialRunning, onClick = { openElf.launch(arrayOf("*/*")) }) {
+                    OutlinedButton(enabled = !busy, onClick = { openElf.launch(arrayOf("*/*")) }) {
                         Text(if (selectedElf == null) "Выбрать ELF прошивки" else "Заменить ELF прошивки")
                     }
                     if (selectedElf != null) Text("ELF выбран")
                     else if (memory.isNotEmpty()) Text(memory)
                     Row {
                         RttImageBuilder.sampleRates.forEach { rate ->
-                            FilterChip(selected = sampleHz == rate, enabled = !busy && !trialRunning,
+                            FilterChip(selected = sampleHz == rate, enabled = !busy,
                                 onClick = {
                                     if (sampleHz != rate) {
                                         sampleHz = rate
-                                        Session.userSaid("выбрал частоту пробы RTT: $rate Гц")
+                                        Session.userSaid("выбрал частоту записи RTT: $rate Гц")
                                     }
                                 }, label = { Text("$rate Гц") })
                         }
@@ -148,19 +136,19 @@ class RttDoctorActivity : ComponentActivity() {
                     Text("Успешная короткая проба не исключает более позднего использования памяти или таймера прошивкой.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Память по ELF") {
-                    OutlinedButton(enabled = !busy && !trialRunning, onClick = { openElf.launch(arrayOf("*/*")) }) { Text("Выбрать ELF прошивки") }
+                    OutlinedButton(enabled = !busy, onClick = { openElf.launch(arrayOf("*/*")) }) { Text("Выбрать ELF прошивки") }
                     if (memory.isNotEmpty()) Text(memory)
                     Text("Оценка для 128 КиБ SRAM F411: запас стека 2 КиБ, буфер 4 КиБ и около 2 КиБ служебных данных. " +
                         "Динамическая куча, стеки задач и соответствие ELF прошивке устройства не проверены. Резерв нужно подтвердить в прошивке.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Таймеры устройства") {
-                    OutlinedButton(enabled = !busy && !trialRunning && route.ready, onClick = ::inspectTimers) { Text("Проверить TIM2–TIM5") }
+                    OutlinedButton(enabled = !busy && route.ready, onClick = ::inspectTimers) { Text("Проверить TIM2–TIM5") }
                     if (!route.ready) Text("Сначала подключите устройство на странице «Устройство».")
                     if (timers.isNotEmpty()) Text(timers)
                     Text("Кандидат: тактирование и прерывания выключены. Прошивка может включить их позже; выбор требует проверки её конфигурации.", style = MaterialTheme.typography.bodySmall)
                 }
                 SectionCard("Частота и tick") {
-                    OutlinedButton(enabled = !busy && !trialRunning && route.ready && memory.isNotEmpty(), onClick = ::inspectTiming) { Text("Проверить частоту и tick") }
+                    OutlinedButton(enabled = !busy && route.ready && memory.isNotEmpty(), onClick = ::inspectTiming) { Text("Проверить частоту и tick") }
                     Text("Адреса из выбранного ELF. Соответствие прошивке не проверено. Частота берётся из SystemCoreClock с учётом APB1 и TIMPRE; переменная может быть устаревшей.", style = MaterialTheme.typography.bodySmall)
                     if (timing.isNotEmpty()) Text(timing)
                 }
@@ -171,15 +159,11 @@ class RttDoctorActivity : ComponentActivity() {
                         Text("Сохранить запись и отчёт…")
                     }
                 }
-                if (busy || trialRunning) LinearProgressIndicator()
+                if (exportMessage.isNotEmpty()) Text(exportMessage)
+                if (busy) LinearProgressIndicator()
             }
         } }
     }
-    override fun onPause() {
-        if (trialRunning) trial?.cancel()
-        super.onPause()
-    }
-
     private fun inspectTiming() {
         busy = true
         timing = ""

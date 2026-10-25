@@ -350,9 +350,8 @@ object Session {
         private set
 
     /** Идущая запись MCAP; пишется в потоке worker после каждого прохода опроса. */
-    @Volatile
     @Volatile var rttRecording: RttTrial? = null
-    var recording: Recording? = null
+    @Volatile var recording: Recording? = null
 
     /**
      * Читать поля [only] (null — все) с периодом [periodMs] мс без догоняющих запросов

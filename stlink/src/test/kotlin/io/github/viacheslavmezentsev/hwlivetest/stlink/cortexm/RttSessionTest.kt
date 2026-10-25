@@ -123,6 +123,22 @@ class RttSessionTest {
         assertTrue(time > 3_600_000); assertTrue(restored); assertEquals("cancelled", result.reason)
     }
 
+    @Test fun storageCheckFailureStillRestoresAndCloses() {
+        var time = 0L; var restored = false; var closed = false
+        val result = RttSession(
+            install = { RttInstaller.Result(true, plan, "complete") },
+            poll = { byteArrayOf(1) },
+            teardown = { _, _ -> restored = true; RttTeardown.Result(true, "complete", 0) },
+            nowMs = { time }, sleep = { time += it }
+        ).run(null, object : RttSession.Sink {
+            override fun accept(bytes: ByteArray) {}
+            override fun progress(elapsedMs: Long) { if (elapsedMs >= 1000) error("disk reserve") }
+            override fun close() { assertTrue(restored); closed = true }
+        })
+        assertTrue(restored); assertTrue(closed)
+        assertEquals("error", result.reason); assertEquals("disk reserve", result.error)
+    }
+
     @Test fun sessionCannotBeReused() {
         val s = session(mutableListOf()); s.run(1, Output())
         try { s.run(1, Output()); fail() } catch (_: IllegalStateException) { }

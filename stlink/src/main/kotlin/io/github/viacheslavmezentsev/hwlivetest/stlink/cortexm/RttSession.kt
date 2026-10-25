@@ -25,7 +25,7 @@ class RttSession internal constructor(
     fun cancel() { cancelled.set(true) }
 
     fun run(durationMs: Long?, sink: Sink): Result {
-        require(durationMs == null || durationMs in 1..3_600_000) { "Запись RTT ограничена одним часом" }
+        require(durationMs == null || durationMs in 1..3_600_000) { "Для ограниченной пробы задайте 1–3600000 мс; null означает ручную остановку" }
         check(used.compareAndSet(false, true)) { "Создайте новый RTT-сеанс" }
         var installed: RttInstaller.Result? = null
         var restored: RttTeardown.Result? = null

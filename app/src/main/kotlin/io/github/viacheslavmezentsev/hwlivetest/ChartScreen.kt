@@ -135,7 +135,7 @@ private fun ChartSummary(ui: ChartUi, selected: Int, onRate: () -> Unit) {
             (line?.series?.lastValue()?.let(line.format) ?: "—")),
             style = MaterialTheme.typography.headlineMedium,
             color = if (ui.error != null) MaterialTheme.colorScheme.error else line?.let { Color(it.color) } ?: MaterialTheme.colorScheme.onSurface)
-        TextButton(onClick = onRate, enabled = !ui.recordBusy && ui.rttRunner == null) { Text("Опрос: ${ui.pollingHz} Гц · изменить") }
+        TextButton(onClick = onRate, enabled = !ui.recordBusy && ui.rttRunner == null) { Text(if (ui.rttRunner != null) "Запись RTT: ${RttDoctorActivity.sampleHz} Гц" else "Опрос SWD: ${ui.pollingHz} Гц · изменить") }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for ((label, ms) in listOf("30 с" to 30_000L, "1 мин" to 60_000L, "5 мин" to 300_000L)) {
                 FilterChip(selected = ui.windowMs == ms, onClick = { ui.windowMs = ms }, label = { Text(label) })
